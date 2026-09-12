@@ -16,6 +16,8 @@ preserves deletes that arrive before their corresponding inserts.
 - Tombstones for delete operations, including out-of-order delivery
 - Idempotent operation replay and conflicting-operation detection
 - Snapshots and per-replica version vectors
+- WebSocket rooms with live operation broadcasts and reconnect catch-up
+- Durable SQLite operation log with transactional, idempotent writes
 - Three-replica offline-edit convergence tests
 - Dependency-free TypeScript core with Node's built-in test runner
 
@@ -28,6 +30,17 @@ npm install
 npm test
 npm run check
 ```
+
+Start the synchronization service (SQLite data is stored in `weavepad.db`):
+
+```bash
+npm start
+```
+
+Clients connect to `ws://127.0.0.1:3000/documents/<document-id>`. Send
+`{"type":"sync","after":0}` to catch up, then publish locally generated CRDT
+operations with `{"type":"operations","operations":[...]}`. Every accepted
+batch is durably written before it is broadcast.
 
 ```ts
 import { SequenceDocument } from "./src/crdt.ts";
@@ -60,18 +73,19 @@ Planned layers build around this core:
 ```text
 React editor + presence
           |
-WebSocket synchronization service
+WebSocket synchronization service + cursor catch-up
           |
 Sequence CRDT + version vectors
           |
-PostgreSQL operation log + snapshots
+SQLite operation log (PostgreSQL adapter planned)
 ```
 
 ## Roadmap
 
 - [x] Convergent sequence CRDT
-- [ ] WebSocket synchronization and catch-up protocol
-- [ ] Durable operation log and snapshot compaction
+- [x] WebSocket synchronization and catch-up protocol
+- [x] Durable SQLite operation log
+- [ ] Snapshot compaction and PostgreSQL storage adapter
 - [ ] Multi-cursor presence and collaborator awareness
 - [ ] Offline browser persistence
 - [ ] Editor UI, sharing flow, and version history
