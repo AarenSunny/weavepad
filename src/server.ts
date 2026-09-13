@@ -1,7 +1,9 @@
 import { createServer, type Server as HttpServer } from "node:http";
+import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
 import type { Operation } from "./crdt.ts";
+import { PresenceManager, type PresenceProfile, type PresenceSelection } from "./presence.ts";
 import { CollaborationHub, type SyncBatch } from "./sync.ts";
 import { SqliteOperationStore, validateDocumentId } from "./store.ts";
 
@@ -15,11 +17,22 @@ interface ClientOperationsMessage {
   operations: Operation[];
 }
 
-type ClientMessage = ClientSyncMessage | ClientOperationsMessage;
+interface ClientPresenceMessage {
+  type: "presence";
+  user: PresenceProfile;
+  selection: PresenceSelection | null;
+}
+
+interface ClientHeartbeatMessage {
+  type: "heartbeat";
+}
+
+type ClientMessage = ClientSyncMessage | ClientOperationsMessage | ClientPresenceMessage | ClientHeartbeatMessage;
 
 export interface SyncServer {
   http: HttpServer;
   hub: CollaborationHub;
+  presence: PresenceManager;
   port: number;
   close(): Promise<void>;
 }
@@ -28,6 +41,8 @@ export interface SyncServerOptions {
   host?: string;
   port?: number;
   databasePath?: string;
+  presenceTtlMs?: number;
+  presenceSweepIntervalMs?: number;
 }
 
 function send(socket: WebSocket, payload: unknown): void {
@@ -47,6 +62,7 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
   const host = options.host ?? "127.0.0.1";
   const store = new SqliteOperationStore(options.databasePath ?? "weavepad.db");
   const hub = new CollaborationHub(store);
+  const presence = new PresenceManager({ ttlMs: options.presenceTtlMs });
   const sockets = new Set<WebSocket>();
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: 1_048_576 });
   const http = createServer((request, response) => {
@@ -75,11 +91,13 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
   });
 
   webSockets.on("connection", (socket: WebSocket, _request, documentId: string) => {
+    const sessionId = randomUUID();
     sockets.add(socket);
     const unsubscribe = hub.subscribe(documentId, (batch) => {
       send(socket, wireBatch("operations", batch));
     });
-    send(socket, { type: "ready", documentId });
+    const unsubscribePresence = presence.subscribe(documentId, (snapshot) => send(socket, snapshot));
+    send(socket, { type: "ready", documentId, sessionId, presence: presence.snapshot(documentId) });
 
     socket.on("message", (data, isBinary) => {
       try {
@@ -89,6 +107,12 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
           send(socket, wireBatch("sync", hub.sync(documentId, message.after ?? 0)));
         } else if (message?.type === "operations") {
           hub.submit(documentId, message.operations);
+        } else if (message?.type === "presence") {
+          presence.update(documentId, sessionId, message.user, message.selection);
+        } else if (message?.type === "heartbeat") {
+          if (!presence.heartbeat(documentId, sessionId)) {
+            throw new Error("send presence before heartbeat");
+          }
         } else {
           throw new Error("unsupported message type");
         }
@@ -102,8 +126,16 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
     socket.on("close", () => {
       sockets.delete(socket);
       unsubscribe();
+      unsubscribePresence();
+      presence.leave(documentId, sessionId);
     });
   });
+
+  const sweepTimer = setInterval(
+    () => presence.sweepExpired(),
+    options.presenceSweepIntervalMs ?? Math.min(5_000, Math.floor(presence.ttlMs / 2)),
+  );
+  sweepTimer.unref();
 
   await new Promise<void>((resolve, reject) => {
     http.once("error", reject);
@@ -118,8 +150,10 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
   return {
     http,
     hub,
+    presence,
     port: address.port,
     async close() {
+      clearInterval(sweepTimer);
       for (const socket of sockets) socket.close(1001, "server shutdown");
       await new Promise<void>((resolve, reject) => {
         webSockets.close(() => http.close((error) => error ? reject(error) : resolve()));

@@ -34,7 +34,11 @@ async function connect(server: SyncServer, documentId = "demo"): Promise<{ socke
   const socket = new WebSocket(`ws://127.0.0.1:${server.port}/documents/${documentId}`);
   const inbox = createInbox(socket);
   await once(socket, "open");
-  assert.deepEqual(await inbox.next(), { type: "ready", documentId });
+  const ready = await inbox.next();
+  assert.equal(ready.type, "ready");
+  assert.equal(ready.documentId, documentId);
+  assert.match(ready.sessionId, /^[0-9a-f-]{36}$/);
+  assert.deepEqual(ready.presence.participants, []);
   return { socket, inbox };
 }
 
@@ -124,4 +128,29 @@ test("protocol errors are isolated to the offending message", async (context) =>
   assert.match((await client.inbox.next()).message, /unsupported/);
   client.socket.send(JSON.stringify({ type: "sync", after: 0 }));
   assert.equal((await client.inbox.next()).type, "sync");
+});
+
+test("presence updates reach the room and disconnects remove the participant", async (context) => {
+  const server = await startSyncServer({ port: 0, databasePath: ":memory:" });
+  context.after(() => server.close());
+  const alice = await connect(server);
+  const bob = await connect(server);
+  context.after(() => closeSocket(bob.socket));
+
+  alice.socket.send(JSON.stringify({
+    type: "presence",
+    user: { userId: "alice", name: "Alice", color: "#7c3aed" },
+    selection: { anchor: "ROOT", focus: "ROOT" },
+  }));
+  const aliceRoster = await alice.inbox.next();
+  const bobRoster = await bob.inbox.next();
+  assert.deepEqual(aliceRoster, bobRoster);
+  assert.equal(bobRoster.participants[0].name, "Alice");
+  assert.equal(bobRoster.participants[0].color, "#7C3AED");
+
+  await closeSocket(alice.socket);
+  const afterDisconnect = await bob.inbox.next();
+  assert.equal(afterDisconnect.type, "presence");
+  assert.deepEqual(afterDisconnect.participants, []);
+  assert.ok(afterDisconnect.revision > bobRoster.revision);
 });

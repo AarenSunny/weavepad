@@ -18,6 +18,7 @@ preserves deletes that arrive before their corresponding inserts.
 - Snapshots and per-replica version vectors
 - WebSocket rooms with live operation broadcasts and reconnect catch-up
 - Durable SQLite operation log with transactional, idempotent writes
+- Revisioned collaborator presence with CRDT-anchored cursors and stale-session expiry
 - Three-replica offline-edit convergence tests
 - Dependency-free TypeScript core with Node's built-in test runner
 
@@ -41,6 +42,10 @@ Clients connect to `ws://127.0.0.1:3000/documents/<document-id>`. Send
 `{"type":"sync","after":0}` to catch up, then publish locally generated CRDT
 operations with `{"type":"operations","operations":[...]}`. Every accepted
 batch is durably written before it is broadcast.
+
+The connection's `ready` message includes a session identifier and the current
+presence roster. See [docs/PRESENCE.md](docs/PRESENCE.md) for cursor updates,
+heartbeats, expiry behavior, and the current trust boundary.
 
 ```ts
 import { SequenceDocument } from "./src/crdt.ts";
@@ -86,7 +91,7 @@ SQLite operation log (PostgreSQL adapter planned)
 - [x] WebSocket synchronization and catch-up protocol
 - [x] Durable SQLite operation log
 - [ ] Snapshot compaction and PostgreSQL storage adapter
-- [ ] Multi-cursor presence and collaborator awareness
+- [x] Multi-cursor presence and collaborator awareness
 - [ ] Offline browser persistence
 - [ ] Editor UI, sharing flow, and version history
 - [ ] Docker Compose demo, load tests, and deployment guide

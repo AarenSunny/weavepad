@@ -10,8 +10,17 @@ Connect to `/documents/:documentId`. Document identifiers contain up to 128
 letters, numbers, underscores, or hyphens. The server answers with:
 
 ```json
-{"type":"ready","documentId":"demo"}
+{
+  "type":"ready",
+  "documentId":"demo",
+  "sessionId":"server-generated-id",
+  "presence":{"type":"presence","documentId":"demo","revision":0,"participants":[]}
+}
 ```
+
+The ready payload carries the current ephemeral presence roster alongside the
+durable synchronization channel. See [PRESENCE.md](PRESENCE.md) for its separate
+lifecycle and cursor model.
 
 The HTTP endpoint `GET /health` supports container and load-balancer health
 checks.
