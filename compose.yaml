@@ -1,0 +1,11 @@
+services:
+  weavepad:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - weavepad-data:/data
+    restart: unless-stopped
+
+volumes:
+  weavepad-data:

@@ -1,0 +1,9 @@
+.git
+.github
+coverage
+dist
+node_modules
+*.db
+*.db-shm
+*.db-wal
+npm-debug.log

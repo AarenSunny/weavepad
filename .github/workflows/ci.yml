@@ -19,3 +19,9 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm audit --omit=dev
       - run: npm run check
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag weavepad:test .

@@ -20,6 +20,7 @@ preserves deletes that arrive before their corresponding inserts.
 - Durable SQLite operation log with transactional, idempotent writes
 - Revisioned collaborator presence with CRDT-anchored cursors and stale-session expiry
 - Responsive React editor with offline queuing and shareable document URLs
+- Single-service production image with health checks and persistent SQLite storage
 - Three-replica offline-edit convergence tests
 - Dependency-free TypeScript core with Node's built-in test runner
 
@@ -48,6 +49,11 @@ npm run dev
 Open `http://127.0.0.1:5173/?document=demo` in two windows to see edits and
 presence synchronize live. A production bundle is created with `npm run build`.
 The [demo guide](docs/DEMO.md) provides a short portfolio walkthrough.
+
+For a production-style single-service demo, run `docker compose up --build` and
+open `http://localhost:3000/?document=demo`. See the
+[deployment guide](docs/DEPLOYMENT.md) for configuration, persistence, reverse
+proxy requirements, and backups.
 
 Clients connect to `ws://127.0.0.1:3000/documents/<document-id>`. Send
 `{"type":"sync","after":0}` to catch up, then publish locally generated CRDT
@@ -105,7 +111,8 @@ SQLite operation log (PostgreSQL adapter planned)
 - [x] Multi-cursor presence and collaborator awareness
 - [x] Responsive editor UI and document sharing links
 - [ ] IndexedDB offline persistence and version history
-- [ ] Docker Compose demo, load tests, and deployment guide
+- [x] Docker Compose demo and deployment guide
+- [ ] Load and soak testing
 
 This project is under active development. The checked items above are complete
 and tested; unchecked items describe later milestones rather than current claims.

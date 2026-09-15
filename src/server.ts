@@ -6,6 +6,7 @@ import type { Operation } from "./crdt.ts";
 import { PresenceManager, type PresenceProfile, type PresenceSelection } from "./presence.ts";
 import { CollaborationHub, type SyncBatch } from "./sync.ts";
 import { SqliteOperationStore, validateDocumentId } from "./store.ts";
+import { serveStatic } from "./static.ts";
 
 interface ClientSyncMessage {
   type: "sync";
@@ -43,6 +44,7 @@ export interface SyncServerOptions {
   databasePath?: string;
   presenceTtlMs?: number;
   presenceSweepIntervalMs?: number;
+  staticDirectory?: string | false;
 }
 
 function send(socket: WebSocket, payload: unknown): void {
@@ -61,16 +63,18 @@ function wireBatch(type: "sync" | "operations", batch: SyncBatch): object {
 export async function startSyncServer(options: SyncServerOptions = {}): Promise<SyncServer> {
   const host = options.host ?? "127.0.0.1";
   const store = new SqliteOperationStore(options.databasePath ?? "weavepad.db");
+  const staticDirectory = options.staticDirectory === undefined ? "dist" : options.staticDirectory;
   const hub = new CollaborationHub(store);
   const presence = new PresenceManager({ ttlMs: options.presenceTtlMs });
   const sockets = new Set<WebSocket>();
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: 1_048_576 });
-  const http = createServer((request, response) => {
+  const http = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/health") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ status: "ok" }));
       return;
     }
+    if (staticDirectory && await serveStatic(request, response, staticDirectory)) return;
     response.writeHead(404).end();
   });
 
@@ -169,6 +173,22 @@ if (import.meta.url === entrypoint) {
     host: process.env.HOST,
     port: process.env.PORT ? Number(process.env.PORT) : undefined,
     databasePath: process.env.WEAVEPAD_DB,
+    staticDirectory: process.env.WEAVEPAD_STATIC ?? "dist",
   });
-  console.log(`WeavePad sync server listening on http://127.0.0.1:${server.port}`);
+  console.log(`WeavePad listening on http://${process.env.HOST ?? "127.0.0.1"}:${server.port}`);
+
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    await server.close();
+  };
+  const handleSignal = () => {
+    void shutdown().catch((error) => {
+      console.error("WeavePad shutdown failed", error);
+      process.exitCode = 1;
+    });
+  };
+  process.once("SIGINT", handleSignal);
+  process.once("SIGTERM", handleSignal);
 }
