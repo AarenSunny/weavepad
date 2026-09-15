@@ -33,7 +33,7 @@ interface CharacterNode {
 const ACTOR_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-function graphemes(text: string): string[] {
+export function splitGraphemes(text: string): string[] {
   return Array.from(segmenter.segment(text), (part) => part.segment);
 }
 
@@ -90,7 +90,7 @@ export class SequenceDocument {
     if (!Number.isInteger(index) || index < 0 || index > visible.length) {
       throw new Error("insert index is outside the document");
     }
-    const values = graphemes(text);
+    const values = splitGraphemes(text);
     if (values.length === 0) return [];
 
     let after = index === 0 ? ROOT_ID : visible[index - 1].id;
@@ -131,6 +131,14 @@ export class SequenceDocument {
       this.apply(operation);
       return cloneOperation(operation) as DeleteOperation;
     });
+  }
+
+  anchorAt(index: number): string {
+    const visible = this.visibleNodes();
+    if (!Number.isInteger(index) || index < 0 || index > visible.length) {
+      throw new Error("anchor index is outside the document");
+    }
+    return index === 0 ? ROOT_ID : visible[index - 1].id;
   }
 
   apply(operation: Operation): boolean {
@@ -209,7 +217,7 @@ export class SequenceDocument {
     }
     if (operation.kind === "insert") {
       if (operation.after !== ROOT_ID) parseId(operation.after);
-      if (graphemes(operation.value).length !== 1) {
+      if (splitGraphemes(operation.value).length !== 1) {
         throw new Error("insert operations must contain exactly one grapheme");
       }
     } else {

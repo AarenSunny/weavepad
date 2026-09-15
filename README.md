@@ -19,6 +19,7 @@ preserves deletes that arrive before their corresponding inserts.
 - WebSocket rooms with live operation broadcasts and reconnect catch-up
 - Durable SQLite operation log with transactional, idempotent writes
 - Revisioned collaborator presence with CRDT-anchored cursors and stale-session expiry
+- Responsive React editor with offline queuing and shareable document URLs
 - Three-replica offline-edit convergence tests
 - Dependency-free TypeScript core with Node's built-in test runner
 
@@ -37,6 +38,16 @@ Start the synchronization service (SQLite data is stored in `weavepad.db`):
 ```bash
 npm start
 ```
+
+In a second terminal, start the browser editor:
+
+```bash
+npm run dev
+```
+
+Open `http://127.0.0.1:5173/?document=demo` in two windows to see edits and
+presence synchronize live. A production bundle is created with `npm run build`.
+The [demo guide](docs/DEMO.md) provides a short portfolio walkthrough.
 
 Clients connect to `ws://127.0.0.1:3000/documents/<document-id>`. Send
 `{"type":"sync","after":0}` to catch up, then publish locally generated CRDT
@@ -76,7 +87,7 @@ invariants, complexity, and tradeoffs.
 Planned layers build around this core:
 
 ```text
-React editor + presence
+React editor + offline queue + presence
           |
 WebSocket synchronization service + cursor catch-up
           |
@@ -92,8 +103,8 @@ SQLite operation log (PostgreSQL adapter planned)
 - [x] Durable SQLite operation log
 - [ ] Snapshot compaction and PostgreSQL storage adapter
 - [x] Multi-cursor presence and collaborator awareness
-- [ ] Offline browser persistence
-- [ ] Editor UI, sharing flow, and version history
+- [x] Responsive editor UI and document sharing links
+- [ ] IndexedDB offline persistence and version history
 - [ ] Docker Compose demo, load tests, and deployment guide
 
 This project is under active development. The checked items above are complete

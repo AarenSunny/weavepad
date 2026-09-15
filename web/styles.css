@@ -1,0 +1,73 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap");
+
+:root {
+  color: #242128;
+  background: #f4f1eb;
+  font-family: "Manrope", sans-serif;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+
+.shell { min-height: 100vh; }
+.topbar {
+  height: 72px;
+  padding: 0 5vw;
+  border-bottom: 1px solid #d8d3ca;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  background: rgba(250, 248, 244, 0.86);
+  backdrop-filter: blur(16px);
+}
+.brand { display: flex; gap: 11px; align-items: center; color: inherit; text-decoration: none; font-weight: 700; }
+.brand-mark { width: 32px; height: 32px; display: grid; place-items: center; color: white; background: #6750a4; border-radius: 9px 9px 9px 3px; }
+.document-pill { display: flex; gap: 9px; align-items: center; padding: 8px 13px; background: #ece8e0; border-radius: 20px; font-size: 12px; }
+.document-pill span { color: #777078; }
+.document-pill strong { font-family: "DM Mono", monospace; font-weight: 500; }
+.status { justify-self: end; display: flex; align-items: center; gap: 7px; text-transform: capitalize; font-size: 12px; color: #69636c; }
+.status i, .active-dot { width: 8px; height: 8px; border-radius: 50%; background: #e29732; }
+.status.online i, .active-dot { background: #3d9b68; box-shadow: 0 0 0 3px #dfeee5; }
+.status.offline i { background: #c85a54; }
+
+.workspace { width: min(1180px, 92vw); margin: 58px auto; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 28px; }
+.editor-panel, .sidebar { background: #fcfbf8; border: 1px solid #ded9d0; box-shadow: 0 18px 60px rgba(74, 62, 48, 0.08); }
+.editor-panel { border-radius: 18px; overflow: hidden; }
+.editor-heading { padding: 30px 36px 22px; display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #e6e1d9; }
+.eyebrow { margin: 0 0 7px; color: #8a798e; font-family: "DM Mono", monospace; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+h1, h2 { margin: 0; letter-spacing: -.04em; }
+h1 { font-size: 28px; }
+h2 { font-size: 20px; }
+.share-button { border: 1px solid #cfc7d8; background: white; color: #6750a4; padding: 9px 14px; border-radius: 9px; font-weight: 600; }
+.share-button:hover { background: #f2edf8; }
+textarea { display: block; width: 100%; min-height: 520px; padding: 40px 11%; border: 0; outline: 0; resize: vertical; background: transparent; color: #302c34; font-family: Georgia, serif; font-size: 19px; line-height: 1.75; }
+textarea::placeholder { color: #b2abb1; }
+.editor-footer { display: flex; justify-content: space-between; padding: 13px 25px; border-top: 1px solid #e6e1d9; color: #8a838b; font-size: 11px; }
+
+.sidebar { height: max-content; padding: 26px; border-radius: 16px; }
+.people { margin: 22px 0 28px; display: grid; gap: 15px; }
+.person { display: grid; grid-template-columns: 38px 1fr 8px; gap: 11px; align-items: center; }
+.avatar { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: white; font-size: 12px; font-weight: 700; }
+.person span:nth-child(2) { display: grid; }
+.person strong { font-size: 13px; }
+.person small, .empty { color: #8b858d; font-size: 11px; }
+.empty { line-height: 1.5; }
+.profile-field { display: grid; gap: 7px; padding-top: 22px; border-top: 1px solid #e6e1d9; color: #766f77; font-size: 11px; }
+.profile-field input { width: 100%; padding: 10px 11px; border: 1px solid #d9d3dc; border-radius: 8px; background: #fff; color: #302c34; font-size: 13px; outline: 0; }
+.profile-field input:focus { border-color: #8b75bb; box-shadow: 0 0 0 3px #ede7f6; }
+.local-first-note { margin-top: 25px; padding: 14px; display: flex; gap: 11px; border-radius: 10px; background: #f0ece5; color: #777078; }
+.local-first-note > span { color: #6750a4; }
+.local-first-note p { margin: 0; font-size: 11px; line-height: 1.5; }
+.local-first-note strong { display: block; color: #4d4850; }
+
+@media (max-width: 760px) {
+  .topbar { padding: 0 4vw; grid-template-columns: 1fr auto; }
+  .document-pill { display: none; }
+  .workspace { margin: 25px auto; grid-template-columns: 1fr; }
+  .sidebar { grid-row: 1; }
+  .editor-heading { padding: 24px; }
+  textarea { min-height: 430px; padding: 30px 24px; }
+}
