@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SequenceDocument, type Operation } from "../src/crdt.ts";
 import type { PresenceParticipant, PresenceProfile, PresenceSelection } from "../src/presence.ts";
 import { applyTextChange, cursorAnchor } from "./editor-state.ts";
+import { IndexedDbDocumentStore } from "./offline-store.ts";
 
 type ConnectionStatus = "connecting" | "online" | "offline";
 
@@ -51,8 +52,8 @@ function initials(name: string): string {
 
 export function App() {
   const documentId = useMemo(documentFromLocation, []);
-  const actor = useMemo(() => crypto.randomUUID(), []);
-  const documentRef = useRef(new SequenceDocument(actor));
+  const offlineStore = useMemo(() => new IndexedDbDocumentStore(), []);
+  const documentRef = useRef(new SequenceDocument(crypto.randomUUID()));
   const pendingRef = useRef<Operation[]>([]);
   const cursorRef = useRef(0);
   const socketRef = useRef<WebSocket | null>(null);
@@ -66,12 +67,53 @@ export function App() {
   const [participants, setParticipants] = useState<PresenceParticipant[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [storageStatus, setStorageStatus] = useState<"loading" | "saved" | "unavailable">("loading");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [revisions, setRevisions] = useState<DocumentRevision[]>([]);
   const [selectedRevision, setSelectedRevision] = useState<number | null>(null);
   const [versionText, setVersionText] = useState("");
+
+  const persistDocument = useCallback(() => {
+    const document = documentRef.current;
+    void offlineStore.save({
+      version: 1,
+      documentId,
+      actor: document.actor,
+      cursor: cursorRef.current,
+      operations: document.snapshot().operations,
+      pendingOperations: pendingRef.current.map((operation) => ({ ...operation })),
+      savedAt: new Date().toISOString(),
+    }).then(() => setStorageStatus("saved"), () => setStorageStatus("unavailable"));
+  }, [documentId, offlineStore]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void offlineStore.load(documentId).then((state) => {
+      if (cancelled || !state) return;
+      const document = SequenceDocument.fromSnapshot(state.actor, { operations: state.operations });
+      documentRef.current = document;
+      cursorRef.current = state.cursor;
+      pendingRef.current = state.pendingOperations;
+      const restoredText = document.toString();
+      textRef.current = restoredText;
+      setText(restoredText);
+      setPendingCount(state.pendingOperations.length);
+    }).then(() => {
+      if (!cancelled) {
+        setStorageStatus("saved");
+        setHydrated(true);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setStorageStatus("unavailable");
+        setHydrated(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [documentId, offlineStore]);
 
   const sendPresence = useCallback(() => {
     const socket = socketRef.current;
@@ -87,6 +129,7 @@ export function App() {
   }, [profile, sendPresence]);
 
   useEffect(() => {
+    if (!hydrated) return undefined;
     let stopped = false;
     let retry: number | undefined;
     let heartbeat: number | undefined;
@@ -126,6 +169,7 @@ export function App() {
           const materialized = documentRef.current.toString();
           textRef.current = materialized;
           setText(materialized);
+          persistDocument();
           if (message.type === "sync" && pendingRef.current.length > 0) {
             socket.send(JSON.stringify({ type: "operations", operations: pendingRef.current }));
           }
@@ -150,7 +194,7 @@ export function App() {
       if (flushTimerRef.current) window.clearTimeout(flushTimerRef.current);
       socketRef.current?.close();
     };
-  }, [documentId, sendPresence]);
+  }, [documentId, hydrated, persistDocument, sendPresence]);
 
   const changeText = (nextText: string) => {
     const operations = applyTextChange(documentRef.current, textRef.current, nextText);
@@ -159,6 +203,7 @@ export function App() {
     if (operations.length === 0) return;
     pendingRef.current.push(...operations);
     setPendingCount(pendingRef.current.length);
+    persistDocument();
     if (flushTimerRef.current) window.clearTimeout(flushTimerRef.current);
     flushTimerRef.current = window.setTimeout(() => {
       const socket = socketRef.current;
@@ -238,15 +283,19 @@ export function App() {
           <textarea
             aria-label="Collaborative document"
             autoFocus
+            disabled={!hydrated}
             onBlur={() => { selectionRef.current = null; sendPresence(); }}
             onChange={(event) => changeText(event.target.value)}
             onSelect={(event) => updateSelection(event.currentTarget)}
-            placeholder="Start writing. Open this link in another window to collaborate…"
+            placeholder={hydrated ? "Start writing. Open this link in another window to collaborate…" : "Restoring your local document…"}
             spellCheck
             value={text}
           />
           <footer className="editor-footer">
             <span>{documentRef.current.length} characters</span>
+            <span>
+              {storageStatus === "loading" ? "Restoring local state" : storageStatus === "saved" ? "Saved locally" : "Browser storage unavailable"}
+            </span>
             <span>{pendingCount > 0 ? `${pendingCount} changes syncing` : "All changes synced"}</span>
           </footer>
         </div>

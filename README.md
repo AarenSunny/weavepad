@@ -19,7 +19,7 @@ preserves deletes that arrive before their corresponding inserts.
 - WebSocket rooms with live operation broadcasts and reconnect catch-up
 - Durable SQLite operation log with transactional, idempotent writes
 - Revisioned collaborator presence with CRDT-anchored cursors and stale-session expiry
-- Responsive React editor with offline queuing and shareable document URLs
+- Responsive React editor with IndexedDB recovery, offline queuing, and shareable URLs
 - Single-service production image with health checks and persistent SQLite storage
 - Durable edit-batch history with read-only historical previews
 - Three-replica offline-edit convergence tests
@@ -112,7 +112,7 @@ SQLite operation log (PostgreSQL adapter planned)
 - [x] Multi-cursor presence and collaborator awareness
 - [x] Responsive editor UI and document sharing links
 - [x] Version history API and in-editor revision previews
-- [ ] IndexedDB offline persistence
+- [x] IndexedDB CRDT snapshots and offline-operation recovery
 - [x] Docker Compose demo and deployment guide
 - [ ] Load and soak testing
 

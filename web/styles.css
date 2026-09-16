@@ -48,6 +48,7 @@ h2 { font-size: 20px; }
 .quiet-button:hover { background: #e9e3da; }
 textarea { display: block; width: 100%; min-height: 520px; padding: 40px 11%; border: 0; outline: 0; resize: vertical; background: transparent; color: #302c34; font-family: Georgia, serif; font-size: 19px; line-height: 1.75; }
 textarea::placeholder { color: #b2abb1; }
+textarea:disabled { cursor: wait; opacity: .72; }
 .editor-footer { display: flex; justify-content: space-between; padding: 13px 25px; border-top: 1px solid #e6e1d9; color: #8a838b; font-size: 11px; }
 
 .sidebar { height: max-content; padding: 26px; border-radius: 16px; }

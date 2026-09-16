@@ -28,6 +28,7 @@ Open `http://127.0.0.1:5173/?document=interview-demo` in two browser windows.
    immutable operation and deterministic ordering makes replicas converge.
 3. Disconnect one window from the network, continue editing, then reconnect.
    The client catches up from its durable cursor before flushing queued edits.
+   Reloading the page also reconstructs the local CRDT checkpoint from IndexedDB.
 4. Restart the sync server and reload. The document returns from SQLite while
    the ephemeral presence roster is rebuilt from active sessions.
 5. Run `npm test`. The suite covers concurrent CRDT edits, out-of-order deletes,
