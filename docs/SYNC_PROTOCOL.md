@@ -74,3 +74,7 @@ SQLite runs in write-ahead-log mode. The operation's server sequence is committe
 before subscribers see it, so a cursor never acknowledges data that would vanish
 on restart. A future PostgreSQL adapter can preserve the same append/load
 interface for horizontally scaled deployments.
+
+Accepted operation batches also create transactional revision metadata. See
+[VERSION_HISTORY.md](VERSION_HISTORY.md) for the replay-based preview API and
+why historical reads never mutate live collaboration state.

@@ -10,6 +10,14 @@ interface StoredWireOperation {
   operation: Operation;
 }
 
+interface DocumentRevision {
+  revision: number;
+  sequence: number;
+  operationCount: number;
+  actors: string[];
+  createdAt: string;
+}
+
 const colors = ["#7C3AED", "#0891B2", "#EA580C", "#16A34A", "#DB2777", "#4F46E5"];
 
 function identity(): PresenceProfile {
@@ -49,6 +57,7 @@ export function App() {
   const cursorRef = useRef(0);
   const socketRef = useRef<WebSocket | null>(null);
   const selectionRef = useRef<PresenceSelection | null>(null);
+  const flushTimerRef = useRef<number | undefined>(undefined);
   const [profile, setProfile] = useState(identity);
   const profileRef = useRef(profile);
   const [text, setText] = useState("");
@@ -57,6 +66,12 @@ export function App() {
   const [participants, setParticipants] = useState<PresenceParticipant[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [revisions, setRevisions] = useState<DocumentRevision[]>([]);
+  const [selectedRevision, setSelectedRevision] = useState<number | null>(null);
+  const [versionText, setVersionText] = useState("");
 
   const sendPresence = useCallback(() => {
     const socket = socketRef.current;
@@ -132,6 +147,7 @@ export function App() {
       stopped = true;
       if (retry) window.clearTimeout(retry);
       if (heartbeat) window.clearInterval(heartbeat);
+      if (flushTimerRef.current) window.clearTimeout(flushTimerRef.current);
       socketRef.current?.close();
     };
   }, [documentId, sendPresence]);
@@ -143,10 +159,13 @@ export function App() {
     if (operations.length === 0) return;
     pendingRef.current.push(...operations);
     setPendingCount(pendingRef.current.length);
-    const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "operations", operations }));
-    }
+    if (flushTimerRef.current) window.clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = window.setTimeout(() => {
+      const socket = socketRef.current;
+      if (socket?.readyState === WebSocket.OPEN && pendingRef.current.length > 0) {
+        socket.send(JSON.stringify({ type: "operations", operations: pendingRef.current }));
+      }
+    }, 350);
   };
 
   const updateSelection = (element: HTMLTextAreaElement) => {
@@ -161,6 +180,36 @@ export function App() {
     await navigator.clipboard.writeText(location.href);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_500);
+  };
+
+  const previewRevision = async (revision: DocumentRevision) => {
+    setSelectedRevision(revision.revision);
+    setHistoryError("");
+    try {
+      const response = await fetch(`/api/documents/${encodeURIComponent(documentId)}/versions/${revision.sequence}`);
+      if (!response.ok) throw new Error("Could not load this revision");
+      const body = await response.json() as { text: string };
+      setVersionText(body.text);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "Could not load this revision");
+    }
+  };
+
+  const showHistory = async () => {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const response = await fetch(`/api/documents/${encodeURIComponent(documentId)}/history`);
+      if (!response.ok) throw new Error("Could not load version history");
+      const body = await response.json() as { revisions: DocumentRevision[] };
+      setRevisions(body.revisions);
+      if (body.revisions[0]) await previewRevision(body.revisions[0]);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "Could not load version history");
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   return (
@@ -181,7 +230,10 @@ export function App() {
               <p className="eyebrow">Shared workspace</p>
               <h1>Untitled document</h1>
             </div>
-            <button className="share-button" onClick={copyLink}>{copied ? "Copied" : "Copy link"}</button>
+            <div className="editor-actions">
+              <button className="quiet-button" onClick={showHistory}>History</button>
+              <button className="share-button" onClick={copyLink}>{copied ? "Copied" : "Copy link"}</button>
+            </div>
           </div>
           <textarea
             aria-label="Collaborative document"
@@ -226,6 +278,46 @@ export function App() {
           </div>
         </aside>
       </section>
+
+      {historyOpen && (
+        <div className="history-backdrop" role="presentation" onMouseDown={() => setHistoryOpen(false)}>
+          <section
+            aria-label="Version history"
+            aria-modal="true"
+            className="history-dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <header>
+              <div><p className="eyebrow">Document timeline</p><h2>Version history</h2></div>
+              <button aria-label="Close version history" className="close-button" onClick={() => setHistoryOpen(false)}>×</button>
+            </header>
+            <div className="history-content">
+              <nav aria-label="Document revisions" className="revision-list">
+                {historyLoading && <p className="empty">Loading revisions…</p>}
+                {!historyLoading && revisions.length === 0 && <p className="empty">No saved revisions yet.</p>}
+                {revisions.map((revision) => (
+                  <button
+                    className={selectedRevision === revision.revision ? "selected" : ""}
+                    key={revision.revision}
+                    onClick={() => previewRevision(revision)}
+                  >
+                    <strong>Revision {revision.revision}</strong>
+                    <span>{new Date(revision.createdAt).toLocaleString()}</span>
+                    <small>
+                      {revision.operationCount} operations · {revision.actors.length} {revision.actors.length === 1 ? "author" : "authors"}
+                    </small>
+                  </button>
+                ))}
+              </nav>
+              <div className="version-preview">
+                <p className="eyebrow">Read-only preview</p>
+                {historyError ? <p className="history-error">{historyError}</p> : <pre>{versionText || "This version is empty."}</pre>}
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

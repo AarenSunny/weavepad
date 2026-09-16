@@ -1,5 +1,10 @@
 import { SequenceDocument, type Operation } from "./crdt.ts";
-import { SqliteOperationStore, type StoredOperation, validateDocumentId } from "./store.ts";
+import {
+  SqliteOperationStore,
+  type DocumentRevision,
+  type StoredOperation,
+  validateDocumentId,
+} from "./store.ts";
 
 export interface SyncBatch {
   documentId: string;
@@ -64,6 +69,20 @@ export class CollaborationHub {
 
   text(documentId: string): string {
     return this.room(documentId).document.toString();
+  }
+
+  history(documentId: string, limit = 50): DocumentRevision[] {
+    return this.store.history(documentId, limit);
+  }
+
+  revisionAt(documentId: string, sequence: number): DocumentRevision | undefined {
+    return this.store.revisionAt(documentId, sequence);
+  }
+
+  versionText(documentId: string, throughSequence: number): string {
+    const document = new SequenceDocument("history");
+    document.merge(this.store.loadThrough(documentId, throughSequence).map((entry) => entry.operation));
+    return document.toString();
   }
 
   private room(documentId: string): Room {

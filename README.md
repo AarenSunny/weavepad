@@ -21,6 +21,7 @@ preserves deletes that arrive before their corresponding inserts.
 - Revisioned collaborator presence with CRDT-anchored cursors and stale-session expiry
 - Responsive React editor with offline queuing and shareable document URLs
 - Single-service production image with health checks and persistent SQLite storage
+- Durable edit-batch history with read-only historical previews
 - Three-replica offline-edit convergence tests
 - Dependency-free TypeScript core with Node's built-in test runner
 
@@ -110,7 +111,8 @@ SQLite operation log (PostgreSQL adapter planned)
 - [ ] Snapshot compaction and PostgreSQL storage adapter
 - [x] Multi-cursor presence and collaborator awareness
 - [x] Responsive editor UI and document sharing links
-- [ ] IndexedDB offline persistence and version history
+- [x] Version history API and in-editor revision previews
+- [ ] IndexedDB offline persistence
 - [x] Docker Compose demo and deployment guide
 - [ ] Load and soak testing
 

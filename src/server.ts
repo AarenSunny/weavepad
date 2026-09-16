@@ -2,6 +2,7 @@ import { createServer, type Server as HttpServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
+import { handleApi } from "./api.ts";
 import type { Operation } from "./crdt.ts";
 import { PresenceManager, type PresenceProfile, type PresenceSelection } from "./presence.ts";
 import { CollaborationHub, type SyncBatch } from "./sync.ts";
@@ -74,6 +75,7 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
       response.end(JSON.stringify({ status: "ok" }));
       return;
     }
+    if (await handleApi(request, response, hub)) return;
     if (staticDirectory && await serveStatic(request, response, staticDirectory)) return;
     response.writeHead(404).end();
   });
