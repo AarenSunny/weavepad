@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { SequenceDocument, type Operation } from "../src/crdt.ts";
 import type { PresenceParticipant, PresenceProfile, PresenceSelection } from "../src/presence.ts";
 import { applyTextChange, cursorAnchor } from "./editor-state.ts";
 import { IndexedDbDocumentStore } from "./offline-store.ts";
-
-type ConnectionStatus = "connecting" | "online" | "offline";
+import { recentTimeLabel, reconnectDelayMs, syncProgressLabel, type ConnectionStatus } from "./sync-health.ts";
 
 interface StoredWireOperation {
   sequence: number;
@@ -59,11 +58,21 @@ export function App() {
   const socketRef = useRef<WebSocket | null>(null);
   const selectionRef = useRef<PresenceSelection | null>(null);
   const flushTimerRef = useRef<number | undefined>(undefined);
+  const historyButtonRef = useRef<HTMLButtonElement | null>(null);
+  const historyCloseRef = useRef<HTMLButtonElement | null>(null);
+  const historyDialogRef = useRef<HTMLElement | null>(null);
   const [profile, setProfile] = useState(identity);
   const profileRef = useRef(profile);
   const [text, setText] = useState("");
   const textRef = useRef(text);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const [successfulReconnects, setSuccessfulReconnects] = useState(0);
+  const [nextRetryDelayMs, setNextRetryDelayMs] = useState<number | null>(null);
+  const [lastConnectedAt, setLastConnectedAt] = useState<number | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [clockNow, setClockNow] = useState(Date.now);
+  const [connectionError, setConnectionError] = useState("");
   const [participants, setParticipants] = useState<PresenceParticipant[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -129,6 +138,11 @@ export function App() {
   }, [profile, sendPresence]);
 
   useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     if (!hydrated) return undefined;
     let stopped = false;
     let retry: number | undefined;
@@ -138,12 +152,18 @@ export function App() {
     const connect = () => {
       if (stopped) return;
       setStatus("connecting");
+      setNextRetryDelayMs(null);
       const socket = new WebSocket(websocketUrl(documentId));
       socketRef.current = socket;
 
       socket.addEventListener("open", () => {
+        if (attempts > 0) setSuccessfulReconnects((count) => count + 1);
         attempts = 0;
         setStatus("online");
+        setReconnectAttempts(0);
+        setNextRetryDelayMs(null);
+        setLastConnectedAt(Date.now());
+        setConnectionError("");
         socket.send(JSON.stringify({ type: "sync", after: cursorRef.current }));
         sendPresence();
         heartbeat = window.setInterval(() => {
@@ -152,27 +172,35 @@ export function App() {
       });
 
       socket.addEventListener("message", (event) => {
-        const message = JSON.parse(String(event.data)) as Record<string, any>;
-        if (message.type === "ready") {
-          setParticipants(message.presence.participants as PresenceParticipant[]);
-        } else if (message.type === "presence") {
-          setParticipants(message.participants as PresenceParticipant[]);
-        } else if (message.type === "sync" || message.type === "operations") {
-          const entries = message.operations as StoredWireOperation[];
-          for (const entry of entries) {
-            documentRef.current.apply(entry.operation);
-            cursorRef.current = Math.max(cursorRef.current, entry.sequence);
+        try {
+          const message = JSON.parse(String(event.data)) as Record<string, any>;
+          if (message.type === "ready") {
+            setParticipants(message.presence.participants as PresenceParticipant[]);
+          } else if (message.type === "presence") {
+            setParticipants(message.participants as PresenceParticipant[]);
+          } else if (message.type === "sync" || message.type === "operations") {
+            const entries = message.operations as StoredWireOperation[];
+            for (const entry of entries) {
+              documentRef.current.apply(entry.operation);
+              cursorRef.current = Math.max(cursorRef.current, entry.sequence);
+            }
+            const accepted = new Set(entries.map((entry) => entry.operation.id));
+            pendingRef.current = pendingRef.current.filter((operation) => !accepted.has(operation.id));
+            setPendingCount(pendingRef.current.length);
+            const materialized = documentRef.current.toString();
+            textRef.current = materialized;
+            setText(materialized);
+            setLastSyncedAt(Date.now());
+            setConnectionError("");
+            persistDocument();
+            if (message.type === "sync" && pendingRef.current.length > 0) {
+              socket.send(JSON.stringify({ type: "operations", operations: pendingRef.current }));
+            }
+          } else if (message.type === "error") {
+            setConnectionError(String(message.message ?? "The sync service rejected a message."));
           }
-          const accepted = new Set(entries.map((entry) => entry.operation.id));
-          pendingRef.current = pendingRef.current.filter((operation) => !accepted.has(operation.id));
-          setPendingCount(pendingRef.current.length);
-          const materialized = documentRef.current.toString();
-          textRef.current = materialized;
-          setText(materialized);
-          persistDocument();
-          if (message.type === "sync" && pendingRef.current.length > 0) {
-            socket.send(JSON.stringify({ type: "operations", operations: pendingRef.current }));
-          }
+        } catch {
+          setConnectionError("The sync service sent an unreadable message; local edits are still available.");
         }
       });
 
@@ -181,9 +209,15 @@ export function App() {
         if (stopped) return;
         setStatus("offline");
         attempts += 1;
-        retry = window.setTimeout(connect, Math.min(1_000 * 2 ** attempts, 10_000));
+        const delayMs = reconnectDelayMs(attempts);
+        setReconnectAttempts(attempts);
+        setNextRetryDelayMs(delayMs);
+        retry = window.setTimeout(connect, delayMs);
       });
-      socket.addEventListener("error", () => socket.close());
+      socket.addEventListener("error", () => {
+        setConnectionError("Connection interrupted; WeavePad will retry automatically.");
+        socket.close();
+      });
     };
 
     connect();
@@ -257,6 +291,37 @@ export function App() {
     }
   };
 
+  const closeHistory = useCallback(() => {
+    setHistoryOpen(false);
+    window.requestAnimationFrame(() => historyButtonRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    if (historyOpen) historyCloseRef.current?.focus();
+  }, [historyOpen]);
+
+  const handleHistoryKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeHistory();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(historyDialogRef.current?.querySelectorAll<HTMLElement>(
+      "button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+    ) ?? []);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
     <main className="shell">
       <header className="topbar">
@@ -265,7 +330,9 @@ export function App() {
           <span>WeavePad</span>
         </a>
         <div className="document-pill"><span>Document</span><strong>{documentId}</strong></div>
-        <div className={`status ${status}`}><i />{status}</div>
+        <div aria-atomic="true" aria-live="polite" className={`status ${status}`} role="status">
+          <i aria-hidden="true" />{status}
+        </div>
       </header>
 
       <section className="workspace">
@@ -276,8 +343,8 @@ export function App() {
               <h1>Untitled document</h1>
             </div>
             <div className="editor-actions">
-              <button className="quiet-button" onClick={showHistory}>History</button>
-              <button className="share-button" onClick={copyLink}>{copied ? "Copied" : "Copy link"}</button>
+              <button className="quiet-button" onClick={showHistory} ref={historyButtonRef} type="button">History</button>
+              <button className="share-button" onClick={copyLink} type="button">{copied ? "Copied" : "Copy link"}</button>
             </div>
           </div>
           <textarea
@@ -293,10 +360,10 @@ export function App() {
           />
           <footer className="editor-footer">
             <span>{documentRef.current.length} characters</span>
-            <span>
+            <span aria-live="polite">
               {storageStatus === "loading" ? "Restoring local state" : storageStatus === "saved" ? "Saved locally" : "Browser storage unavailable"}
             </span>
-            <span>{pendingCount > 0 ? `${pendingCount} changes syncing` : "All changes synced"}</span>
+            <span aria-live="polite">{syncProgressLabel(status, pendingCount)}</span>
           </footer>
         </div>
 
@@ -322,24 +389,38 @@ export function App() {
             />
           </label>
           <div className="local-first-note">
-            <span>↻</span>
+            <span aria-hidden="true">↻</span>
             <p><strong>Local-first by design</strong>Your edits remain usable while disconnected and merge on reconnect.</p>
           </div>
+          <section aria-labelledby="sync-health-heading" className="sync-health" tabIndex={0}>
+            <p className="eyebrow" id="sync-health-heading">Sync health</p>
+            <dl>
+              <div><dt>Last connected</dt><dd>{recentTimeLabel(lastConnectedAt, clockNow)}</dd></div>
+              <div><dt>Last sync</dt><dd>{recentTimeLabel(lastSyncedAt, clockNow)}</dd></div>
+              <div><dt>Reconnects</dt><dd>{successfulReconnects}</dd></div>
+              {nextRetryDelayMs !== null && (
+                <div><dt>Retry</dt><dd>attempt {reconnectAttempts} in ≤{nextRetryDelayMs / 1_000}s</dd></div>
+              )}
+            </dl>
+            {connectionError && <p className="sync-error" role="alert">{connectionError}</p>}
+          </section>
         </aside>
       </section>
 
       {historyOpen && (
-        <div className="history-backdrop" role="presentation" onMouseDown={() => setHistoryOpen(false)}>
+        <div className="history-backdrop" role="presentation" onMouseDown={closeHistory}>
           <section
             aria-label="Version history"
             aria-modal="true"
             className="history-dialog"
+            onKeyDown={handleHistoryKeyDown}
             onMouseDown={(event) => event.stopPropagation()}
+            ref={historyDialogRef}
             role="dialog"
           >
             <header>
               <div><p className="eyebrow">Document timeline</p><h2>Version history</h2></div>
-              <button aria-label="Close version history" className="close-button" onClick={() => setHistoryOpen(false)}>×</button>
+              <button aria-label="Close version history" className="close-button" onClick={closeHistory} ref={historyCloseRef} type="button">×</button>
             </header>
             <div className="history-content">
               <nav aria-label="Document revisions" className="revision-list">
@@ -350,6 +431,7 @@ export function App() {
                     className={selectedRevision === revision.revision ? "selected" : ""}
                     key={revision.revision}
                     onClick={() => previewRevision(revision)}
+                    type="button"
                   >
                     <strong>Revision {revision.revision}</strong>
                     <span>{new Date(revision.createdAt).toLocaleString()}</span>

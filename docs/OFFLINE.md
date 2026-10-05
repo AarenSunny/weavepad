@@ -33,6 +33,19 @@ once the application assets are loaded, but a brand-new page load with no networ
 still requires those assets to be present in the browser cache. Full offline app
 shell caching is deliberately separate from CRDT state recovery.
 
+## Connection visibility
+
+The editor exposes `connecting`, `online`, and `offline` as a live status and
+uses capped exponential reconnect delays of 1, 2, 4, 8, then 10 seconds. The
+Sync health panel reports the last connection and synchronization, successful
+reconnect count, pending retry attempt, and the latest protocol or transport
+error. Pending-work copy changes with connection state so the interface never
+labels an offline queue as fully synchronized.
+
+These are client-session diagnostics rather than centralized production
+telemetry. They reset on page reload and do not replace server metrics, tracing,
+or alerting in a multi-instance deployment.
+
 ## Isolation and testing
 
 Checkpoints use the document ID as their IndexedDB key, so shareable rooms cannot

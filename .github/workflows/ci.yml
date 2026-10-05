@@ -19,6 +19,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm audit --omit=dev
       - run: npm run check
+      - run: npm run collaboration-demo
 
   container:
     runs-on: ubuntu-latest

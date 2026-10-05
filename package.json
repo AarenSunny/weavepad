@@ -11,6 +11,7 @@
     "start": "node src/server.ts",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "collaboration-demo": "node tools/collaboration-demo.ts",
     "test": "node --test",
     "check": "npm run build && node --run test"
   },

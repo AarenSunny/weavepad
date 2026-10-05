@@ -11,6 +11,10 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible, .sync-health:focus-visible {
+  outline: 3px solid #8b75bb;
+  outline-offset: 3px;
+}
 
 .shell { min-height: 100vh; }
 .topbar {
@@ -66,6 +70,12 @@ textarea:disabled { cursor: wait; opacity: .72; }
 .local-first-note > span { color: #6750a4; }
 .local-first-note p { margin: 0; font-size: 11px; line-height: 1.5; }
 .local-first-note strong { display: block; color: #4d4850; }
+.sync-health { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e6e1d9; }
+.sync-health dl { margin: 0; display: grid; gap: 8px; }
+.sync-health dl div { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; }
+.sync-health dt { color: #817a82; }
+.sync-health dd { margin: 0; color: #4d4850; font-family: "DM Mono", monospace; text-align: right; }
+.sync-error { margin: 12px 0 0; color: #a43f3a; font-size: 11px; line-height: 1.5; }
 
 .history-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px; background: rgba(37, 31, 39, .34); backdrop-filter: blur(7px); }
 .history-dialog { width: min(880px, 95vw); max-height: min(680px, 90vh); overflow: hidden; border: 1px solid #d8d1dc; border-radius: 18px; background: #fcfbf8; box-shadow: 0 30px 100px rgba(42, 31, 50, .28); }
@@ -90,6 +100,7 @@ textarea:disabled { cursor: wait; opacity: .72; }
   .editor-heading { padding: 24px; }
   .editor-actions { align-items: stretch; flex-direction: column-reverse; }
   textarea { min-height: 430px; padding: 30px 24px; }
+  .editor-footer { align-items: flex-start; flex-direction: column; gap: 5px; }
   .history-content { grid-template-columns: 1fr; }
   .revision-list { max-height: 180px; border-right: 0; border-bottom: 1px solid #e3ddd5; }
   .version-preview { min-height: 260px; }

@@ -23,6 +23,9 @@ preserves deletes that arrive before their corresponding inserts.
 - Single-service production image with health checks and persistent SQLite storage
 - Durable edit-batch history with read-only historical previews
 - Three-replica offline-edit convergence tests
+- Accessible sync-health status, reconnect telemetry, and keyboard-contained
+  version history
+- Deterministic two-client offline/reconnect and restart demonstration
 - Dependency-free TypeScript core with Node's built-in test runner
 
 ## Try the CRDT
@@ -49,7 +52,19 @@ npm run dev
 
 Open `http://127.0.0.1:5173/?document=demo` in two windows to see edits and
 presence synchronize live. A production bundle is created with `npm run build`.
-The [demo guide](docs/DEMO.md) provides a short portfolio walkthrough.
+The [demo guide](docs/DEMO.md) provides a short portfolio walkthrough, and the
+[offline design notes](docs/OFFLINE.md) explain recovery ordering, connection
+visibility, and the remaining production telemetry boundary.
+
+For a machine-readable collaboration proof, run:
+
+```bash
+npm run collaboration-demo
+```
+
+The scenario disconnects one of two clients, creates concurrent online and
+offline edits, reconnects and catches up, flushes pending work, checks all
+replicas for convergence, and restarts the server against the same SQLite file.
 
 For a production-style single-service demo, run `docker compose up --build` and
 open `http://localhost:3000/?document=demo`. See the

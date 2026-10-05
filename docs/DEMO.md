@@ -35,6 +35,30 @@ Open `http://127.0.0.1:5173/?document=interview-demo` in two browser windows.
    Unicode, live WebSockets, reconnect catch-up, process restarts, and presence
    expiry.
 
+## Deterministic collaboration proof
+
+```bash
+npm run collaboration-demo
+```
+
+This machine-readable scenario starts two WebSocket clients, takes one offline,
+creates concurrent edits, reconnects from its durable cursor, flushes its
+offline operations, verifies all replicas converge, and restarts the service to
+verify SQLite recovery. It runs over loopback in one process and deliberately
+does not claim to measure wide-area latency, multi-node availability, or
+concurrent-user capacity.
+
+## Keyboard and status checks
+
+- Tab through the header controls, editor, display-name field, and sync-health
+  region with a visible focus indicator.
+- Open History, confirm focus moves to Close, cycles inside the modal, and
+  returns to History after Escape.
+- Stop the sync service and confirm the live status announces offline state,
+  queued edits remain editable, and the retry attempt appears in Sync health.
+- Restart the service and confirm reconnect count, last-sync time, and pending
+  changes update without reloading.
+
 ## Suggested screenshots
 
 - Desktop editor with two named collaborators and a short formatted-looking note
