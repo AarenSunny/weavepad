@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { once } from "node:events";
 import { test } from "node:test";
 import { WebSocket } from "ws";
-import { SequenceDocument } from "../src/crdt.ts";
+import { SequenceDocument, type Operation } from "../src/crdt.ts";
 import { startSyncServer, type SyncServer } from "../src/server.ts";
 
 interface Inbox {
@@ -93,6 +93,29 @@ test("a reconnecting client catches up from its last durable cursor", async (con
   assert.equal(catchUp.operations.length, 1);
   assert.equal(catchUp.operations[0].operation.value, "B");
   assert.ok(catchUp.cursor > first.cursor);
+});
+
+test("a client behind compaction receives a checkpoint before remaining operations", async (context) => {
+  const server = await startSyncServer({ port: 0, databasePath: ":memory:" });
+  context.after(() => server.close());
+  const author = new SequenceDocument("author");
+  for (let index = 0; index < 10; index += 1) {
+    server.hub.submit("compacted", author.localInsert(author.length, String(index)));
+  }
+  const report = server.hub.compact("compacted", 2);
+  const client = await connect(server, "compacted");
+  context.after(() => closeSocket(client.socket));
+
+  client.socket.send(JSON.stringify({ type: "sync", after: 0 }));
+  const sync = await client.inbox.next();
+  assert.equal(sync.type, "sync");
+  assert.equal(sync.checkpoint.sequence, report.checkpointSequence);
+  assert.equal(sync.checkpoint.operations.length, 9);
+  assert.equal(sync.operations.length, 1);
+  const replica = new SequenceDocument("reader");
+  replica.merge(sync.checkpoint.operations);
+  replica.merge(sync.operations.map((entry: { operation: Operation }) => entry.operation));
+  assert.equal(replica.toString(), server.hub.text("compacted"));
 });
 
 test("SQLite persistence survives a complete server restart", async (context) => {

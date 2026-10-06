@@ -1,6 +1,6 @@
 {
   "name": "weavepad",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "A local-first collaborative editor built on a sequence CRDT.",
   "type": "module",
@@ -12,6 +12,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "collaboration-demo": "node tools/collaboration-demo.ts",
+    "compaction-experiment": "node tools/compaction-experiment.ts",
     "test": "node --test",
     "check": "npm run build && node --run test"
   },

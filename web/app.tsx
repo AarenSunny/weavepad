@@ -10,6 +10,11 @@ interface StoredWireOperation {
   operation: Operation;
 }
 
+interface WireCheckpoint {
+  sequence: number;
+  operations: Operation[];
+}
+
 interface DocumentRevision {
   revision: number;
   sequence: number;
@@ -180,11 +185,19 @@ export function App() {
             setParticipants(message.participants as PresenceParticipant[]);
           } else if (message.type === "sync" || message.type === "operations") {
             const entries = message.operations as StoredWireOperation[];
+            const checkpoint = message.checkpoint as WireCheckpoint | undefined;
+            if (checkpoint) {
+              documentRef.current.merge(checkpoint.operations);
+              cursorRef.current = Math.max(cursorRef.current, checkpoint.sequence);
+            }
             for (const entry of entries) {
               documentRef.current.apply(entry.operation);
               cursorRef.current = Math.max(cursorRef.current, entry.sequence);
             }
-            const accepted = new Set(entries.map((entry) => entry.operation.id));
+            const accepted = new Set([
+              ...(checkpoint?.operations.map((operation) => operation.id) ?? []),
+              ...entries.map((entry) => entry.operation.id),
+            ]);
             pendingRef.current = pendingRef.current.filter((operation) => !accepted.has(operation.id));
             setPendingCount(pendingRef.current.length);
             const materialized = documentRef.current.toString();

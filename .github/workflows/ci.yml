@@ -20,6 +20,7 @@ jobs:
       - run: npm audit --omit=dev
       - run: npm run check
       - run: npm run collaboration-demo
+      - run: npm run compaction-experiment -- --batches 100 --retain 10 --samples 5
 
   container:
     runs-on: ubuntu-latest

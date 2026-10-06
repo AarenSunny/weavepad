@@ -26,6 +26,9 @@ preserves deletes that arrive before their corresponding inserts.
 - Accessible sync-health status, reconnect telemetry, and keyboard-contained
   version history
 - Deterministic two-client offline/reconnect and restart demonstration
+- Checkpoint-aware catch-up with bounded revision retention and measured
+  operation-row compaction
+- Seeded four-replica randomized convergence tests and bounded scale experiment
 - Dependency-free TypeScript core with Node's built-in test runner
 
 ## Try the CRDT
@@ -65,6 +68,18 @@ npm run collaboration-demo
 The scenario disconnects one of two clients, creates concurrent online and
 offline edits, reconnects and catches up, flushes pending work, checks all
 replicas for convergence, and restarts the server against the same SQLite file.
+
+Run the bounded compaction experiment:
+
+```bash
+npm run compaction-experiment
+```
+
+The verified 500-revision development run reduced operation rows from 500 to 24
+while preserving all 500 logical CRDT operations and exact text. Serialized
+payload grew slightly, so this is correctly described as row/replay compaction,
+not fundamental CRDT state compression. See the
+[compaction design](docs/COMPACTION.md) for the invariant and measurement limits.
 
 For a production-style single-service demo, run `docker compose up --build` and
 open `http://localhost:3000/?document=demo`. See the
@@ -123,13 +138,14 @@ SQLite operation log (PostgreSQL adapter planned)
 - [x] Convergent sequence CRDT
 - [x] WebSocket synchronization and catch-up protocol
 - [x] Durable SQLite operation log
-- [ ] Snapshot compaction and PostgreSQL storage adapter
+- [x] Checkpoint compaction with checkpoint-aware reconnect
+- [ ] PostgreSQL storage adapter and multi-node compaction coordination
 - [x] Multi-cursor presence and collaborator awareness
 - [x] Responsive editor UI and document sharing links
 - [x] Version history API and in-editor revision previews
 - [x] IndexedDB CRDT snapshots and offline-operation recovery
 - [x] Docker Compose demo and deployment guide
-- [ ] Load and soak testing
+- [x] Bounded scale experiment and seeded randomized multi-replica testing
 
 This project is under active development. The checked items above are complete
 and tested; unchecked items describe later milestones rather than current claims.

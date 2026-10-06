@@ -51,6 +51,25 @@ actor's operation 12 does not prove that operation 11 was received. Sequence
 queries make missed broadcasts recoverable even when client delivery is
 interrupted or reordered.
 
+After server-side compaction, a client whose cursor predates the retained
+checkpoint receives an additional checkpoint before the remaining operation
+rows:
+
+```json
+{
+  "type":"sync",
+  "documentId":"demo",
+  "cursor":120,
+  "checkpoint":{"sequence":100,"operations":[...]},
+  "operations":[...]
+}
+```
+
+The client merges checkpoint operations idempotently into its existing local
+replica, preserving offline work, then applies later rows and advances its
+cursor. Pending identifiers found in either part are acknowledged. Clients at
+or beyond checkpoint sequence receive only later rows.
+
 ## Publishing operations
 
 Clients send up to 1,000 operations in a batch:
@@ -77,4 +96,6 @@ interface for horizontally scaled deployments.
 
 Accepted operation batches also create transactional revision metadata. See
 [VERSION_HISTORY.md](VERSION_HISTORY.md) for the replay-based preview API and
-why historical reads never mutate live collaboration state.
+why historical reads never mutate live collaboration state. See
+[COMPACTION.md](COMPACTION.md) for the checkpoint invariant and retention
+boundary.

@@ -15,9 +15,16 @@ A revision stores:
 - a server timestamp.
 
 The revision does not duplicate document text. To preview an old version, the
-server replays that document's immutable operations through the chosen sequence
-into a fresh `SequenceDocument`. This makes history auditable and exercises the
-same deterministic materialization path used by live replicas.
+server replays the retained checkpoint plus immutable operations through the
+chosen sequence into a fresh `SequenceDocument`. This makes history auditable
+and exercises the same deterministic materialization path used by live
+replicas.
+
+Compaction keeps a configured recent revision window. The oldest retained
+revision is materialized by the checkpoint; earlier revision metadata is pruned
+because its operation rows are no longer independently replayable. The history
+API never advertises a version it cannot reconstruct. See
+[COMPACTION.md](COMPACTION.md) for the exact invariant and tradeoff.
 
 ## HTTP API
 

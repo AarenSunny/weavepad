@@ -15,8 +15,10 @@ not merely a copy of the visible text:
 The editor is read-only for the brief IndexedDB hydration step. It reconstructs
 the local `SequenceDocument`, renders the saved text, and only then opens its
 WebSocket. On connection it requests operations after the saved cursor, applies
-that catch-up, and submits the saved pending queue. Duplicate operations remain
-safe because both the CRDT and server store are idempotent.
+that catch-up, and submits the saved pending queue. If the cursor predates a
+server checkpoint, the client merges its complete operation set before later
+rows. Duplicate operations remain safe because both the CRDT and server store
+are idempotent.
 
 This order avoids two common recovery bugs: overwriting local offline edits with
 a server snapshot, and generating new operations under a different replica ID

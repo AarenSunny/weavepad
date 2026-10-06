@@ -1,6 +1,7 @@
 import { SequenceDocument, type Operation } from "./crdt.ts";
 import {
   SqliteOperationStore,
+  type CompactionReport,
   type DocumentRevision,
   type StoredOperation,
   validateDocumentId,
@@ -9,6 +10,10 @@ import {
 export interface SyncBatch {
   documentId: string;
   cursor: number;
+  checkpoint?: {
+    sequence: number;
+    operations: Operation[];
+  };
   operations: StoredOperation[];
 }
 
@@ -28,12 +33,16 @@ export class CollaborationHub {
   }
 
   sync(documentId: string, afterSequence = 0): SyncBatch {
-    const room = this.room(documentId);
-    const operations = this.store.load(documentId, afterSequence);
+    this.room(documentId);
+    const state = this.store.state(documentId, afterSequence);
     return {
       documentId,
-      cursor: operations.at(-1)?.sequence ?? this.latestSequence(room, documentId),
-      operations,
+      cursor: state.cursor,
+      checkpoint: state.checkpoint ? {
+        sequence: state.checkpoint.sequence,
+        operations: state.checkpoint.snapshot.operations,
+      } : undefined,
+      operations: state.operations,
     };
   }
 
@@ -81,8 +90,13 @@ export class CollaborationHub {
 
   versionText(documentId: string, throughSequence: number): string {
     const document = new SequenceDocument("history");
-    document.merge(this.store.loadThrough(documentId, throughSequence).map((entry) => entry.operation));
+    document.merge(this.store.snapshotThrough(documentId, throughSequence).operations);
     return document.toString();
+  }
+
+  compact(documentId: string, retainRevisions = 50): CompactionReport {
+    this.room(documentId);
+    return this.store.compact(documentId, retainRevisions);
   }
 
   private room(documentId: string): Room {
@@ -90,14 +104,16 @@ export class CollaborationHub {
     const existing = this.rooms.get(documentId);
     if (existing) return existing;
 
+    const state = this.store.state(documentId);
     const document = new SequenceDocument("server");
-    document.merge(this.store.load(documentId).map((entry) => entry.operation));
+    document.merge(state.checkpoint?.snapshot.operations ?? []);
+    document.merge(state.operations.map((entry) => entry.operation));
     const room = { document, subscribers: new Set<Subscriber>() };
     this.rooms.set(documentId, room);
     return room;
   }
 
   private latestSequence(_room: Room, documentId: string): number {
-    return this.store.load(documentId).at(-1)?.sequence ?? 0;
+    return this.store.latestSequence(documentId);
   }
 }

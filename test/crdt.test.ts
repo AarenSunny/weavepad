@@ -81,6 +81,51 @@ test("snapshots restore tombstones and support new local edits", () => {
   assert.equal(restored.toString(), "Draft");
 });
 
+test("seeded randomized offline deliveries converge across four replicas", () => {
+  let seed = 0x5EED1234;
+  const random = () => {
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    return (seed >>> 0) / 0x1_0000_0000;
+  };
+  const shuffle = <T>(values: T[]): T[] => {
+    const copy = [...values];
+    for (let index = copy.length - 1; index > 0; index -= 1) {
+      const selected = Math.floor(random() * (index + 1));
+      [copy[index], copy[selected]] = [copy[selected], copy[index]];
+    }
+    return copy;
+  };
+
+  for (let scenario = 0; scenario < 25; scenario += 1) {
+    const source = new SequenceDocument(`source-${scenario}`);
+    const initial = source.localInsert(0, "shared");
+    const replicas = ["alice", "bob", "carol", "dave"].map((name) => {
+      const replica = new SequenceDocument(`${name}-${scenario}`);
+      replica.merge(initial);
+      return replica;
+    });
+    const offlineOperations: Operation[] = [];
+    for (const [replicaIndex, replica] of replicas.entries()) {
+      for (let edit = 0; edit < 8; edit += 1) {
+        if (replica.length > 1 && random() < 0.35) {
+          const index = Math.floor(random() * replica.length);
+          offlineOperations.push(...replica.localDelete(index, 1));
+        } else {
+          const index = Math.floor(random() * (replica.length + 1));
+          offlineOperations.push(...replica.localInsert(index, String(replicaIndex)));
+        }
+      }
+    }
+    for (const replica of replicas) replica.merge(shuffle(offlineOperations));
+    assert.ok(replicas.every((replica) => replica.toString() === replicas[0].toString()));
+    for (const replica of replicas) {
+      assert.deepEqual(replica.versionVector(), replicas[0].versionVector());
+    }
+  }
+});
+
 test("invalid indices and malformed remote operations are rejected", () => {
   const document = new SequenceDocument("alice");
   assert.throws(() => document.localInsert(1, "A"), /outside the document/);

@@ -57,6 +57,7 @@ function wireBatch(type: "sync" | "operations", batch: SyncBatch): object {
     type,
     documentId: batch.documentId,
     cursor: batch.cursor,
+    checkpoint: batch.checkpoint,
     operations: batch.operations,
   };
 }
