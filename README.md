@@ -58,7 +58,9 @@ Open `http://127.0.0.1:5173/?document=demo` in two windows to see edits and
 presence synchronize live. A production bundle is created with `npm run build`.
 The [demo guide](docs/DEMO.md) provides a short portfolio walkthrough, and the
 [offline design notes](docs/OFFLINE.md) explain recovery ordering, connection
-visibility, and the remaining production telemetry boundary.
+visibility, and the remaining production telemetry boundary. The
+[accessibility checks](docs/ACCESSIBILITY.md) document keyboard behavior,
+contrast evidence, and the limits of automated coverage.
 
 For a machine-readable collaboration proof, run:
 
