@@ -6,6 +6,12 @@ labels use tokens chosen for WCAG 2.2 AA contrast. The automated contrast test
 reads those exact CSS custom properties and verifies a ratio of at least 4.5:1
 against every surface where the tokens appear.
 
+Collaborator avatar backgrounds are dynamic. The editor calculates relative
+luminance and chooses black or white initials—whichever produces the stronger
+contrast—while hiding the decorative initials from assistive technology because
+the collaborator's full name immediately follows them. Tests cover every
+generated avatar color plus light, dark, midpoint, and invalid inputs.
+
 This check protects the currently declared color pairs; it is not a claim that
 automated tests prove complete accessibility. Release review should still cover
 keyboard-only editing, focus order and restoration, screen-reader announcements,

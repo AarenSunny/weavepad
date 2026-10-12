@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { SequenceDocument, type Operation } from "../src/crdt.ts";
 import type { PresenceParticipant, PresenceProfile, PresenceSelection } from "../src/presence.ts";
+import { AVATAR_COLORS, avatarTextColor } from "./color-contrast.ts";
 import { applyTextChange, cursorAnchor } from "./editor-state.ts";
 import { IndexedDbDocumentStore } from "./offline-store.ts";
 import { recentTimeLabel, reconnectDelayMs, syncProgressLabel, type ConnectionStatus } from "./sync-health.ts";
@@ -23,8 +24,6 @@ interface DocumentRevision {
   createdAt: string;
 }
 
-const colors = ["#7C3AED", "#0891B2", "#EA580C", "#16A34A", "#DB2777", "#4F46E5"];
-
 function identity(): PresenceProfile {
   const stored = localStorage.getItem("weavepad.identity");
   if (stored) return JSON.parse(stored) as PresenceProfile;
@@ -32,7 +31,7 @@ function identity(): PresenceProfile {
   const profile = {
     userId,
     name: `Guest ${userId.slice(0, 4).toUpperCase()}`,
-    color: colors[Math.floor(Math.random() * colors.length)],
+    color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
   };
   localStorage.setItem("weavepad.identity", JSON.stringify(profile));
   return profile;
@@ -386,7 +385,13 @@ export function App() {
           <div className="people">
             {participants.map((participant) => (
               <div className="person" key={participant.sessionId}>
-                <span className="avatar" style={{ background: participant.color }}>{initials(participant.name)}</span>
+                <span
+                  aria-hidden="true"
+                  className="avatar"
+                  style={{ background: participant.color, color: avatarTextColor(participant.color) }}
+                >
+                  {initials(participant.name)}
+                </span>
                 <span><strong>{participant.name}</strong><small>{participant.selection ? "Editing now" : "Viewing"}</small></span>
                 <i className="active-dot" />
               </div>
