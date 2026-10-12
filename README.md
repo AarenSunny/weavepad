@@ -25,6 +25,7 @@ preserves deletes that arrive before their corresponding inserts.
 - Three-replica offline-edit convergence tests
 - Accessible sync-health status, reconnect telemetry, and keyboard-contained
   version history
+- Aggregate server runtime metrics without document or user content
 - Deterministic two-client offline/reconnect and restart demonstration
 - Checkpoint-aware catch-up with bounded revision retention and measured
   operation-row compaction

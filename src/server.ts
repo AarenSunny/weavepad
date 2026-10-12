@@ -48,6 +48,14 @@ export interface SyncServerOptions {
   staticDirectory?: string | false;
 }
 
+interface RuntimeMetrics {
+  startedAt: number;
+  totalConnections: number;
+  messagesReceived: number;
+  rejectedMessages: number;
+  operationsPersisted: number;
+}
+
 function send(socket: WebSocket, payload: unknown): void {
   if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
 }
@@ -69,11 +77,34 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
   const hub = new CollaborationHub(store);
   const presence = new PresenceManager({ ttlMs: options.presenceTtlMs });
   const sockets = new Set<WebSocket>();
+  const metrics: RuntimeMetrics = {
+    startedAt: Date.now(),
+    totalConnections: 0,
+    messagesReceived: 0,
+    rejectedMessages: 0,
+    operationsPersisted: 0,
+  };
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: 1_048_576 });
   const http = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/health") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+    if (request.method === "GET" && request.url === "/metrics") {
+      response.writeHead(200, {
+        "cache-control": "no-store",
+        "content-type": "application/json",
+      });
+      response.end(JSON.stringify({
+        status: "ok",
+        uptimeSeconds: Math.max(0, Math.floor((Date.now() - metrics.startedAt) / 1_000)),
+        activeConnections: sockets.size,
+        totalConnections: metrics.totalConnections,
+        messagesReceived: metrics.messagesReceived,
+        rejectedMessages: metrics.rejectedMessages,
+        operationsPersisted: metrics.operationsPersisted,
+      }));
       return;
     }
     if (await handleApi(request, response, hub)) return;
@@ -100,6 +131,7 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
   webSockets.on("connection", (socket: WebSocket, _request, documentId: string) => {
     const sessionId = randomUUID();
     sockets.add(socket);
+    metrics.totalConnections += 1;
     const unsubscribe = hub.subscribe(documentId, (batch) => {
       send(socket, wireBatch("operations", batch));
     });
@@ -107,13 +139,15 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
     send(socket, { type: "ready", documentId, sessionId, presence: presence.snapshot(documentId) });
 
     socket.on("message", (data, isBinary) => {
+      metrics.messagesReceived += 1;
       try {
         if (isBinary) throw new Error("binary messages are not supported");
         const message = JSON.parse(data.toString()) as ClientMessage;
         if (message?.type === "sync") {
           send(socket, wireBatch("sync", hub.sync(documentId, message.after ?? 0)));
         } else if (message?.type === "operations") {
-          hub.submit(documentId, message.operations);
+          const batch = hub.submit(documentId, message.operations);
+          metrics.operationsPersisted += batch.operations.length;
         } else if (message?.type === "presence") {
           presence.update(documentId, sessionId, message.user, message.selection);
         } else if (message?.type === "heartbeat") {
@@ -124,6 +158,7 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
           throw new Error("unsupported message type");
         }
       } catch (error) {
+        metrics.rejectedMessages += 1;
         send(socket, {
           type: "error",
           message: error instanceof Error ? error.message : "invalid message",

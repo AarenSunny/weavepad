@@ -4,6 +4,14 @@ The production server hosts the compiled React editor, WebSocket rooms, health
 endpoint, and SQLite operation log in one process. Browser clients therefore use
 the same origin for HTTP and WebSocket traffic with no CORS configuration.
 
+`GET /health` is the minimal liveness probe. `GET /metrics` returns uncached,
+process-local JSON counters for active and total WebSocket connections,
+received and rejected messages, persisted operations, and uptime. The endpoint
+contains no document IDs, user identities, or payloads. It is intentionally a
+single-process diagnostic rather than durable telemetry; production deployments
+should restrict it at the reverse proxy as appropriate and export centralized
+metrics, traces, and alerts separately.
+
 ## Docker Compose
 
 ```bash
