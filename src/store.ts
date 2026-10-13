@@ -43,6 +43,24 @@ export interface CompactionReport {
 
 const DOCUMENT_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
+function checkpointSnapshot(payload: string, operationCount: number): DocumentSnapshot {
+  let snapshot: unknown;
+  try {
+    snapshot = JSON.parse(payload);
+  } catch {
+    throw new Error("corrupt checkpoint snapshot JSON");
+  }
+  if (!snapshot || typeof snapshot !== "object" ||
+      !Array.isArray((snapshot as { operations?: unknown }).operations)) {
+    throw new Error("corrupt checkpoint snapshot envelope");
+  }
+  const operations = (snapshot as DocumentSnapshot).operations;
+  if (operations.length !== operationCount) {
+    throw new Error("corrupt checkpoint operation count");
+  }
+  return { operations };
+}
+
 export function validateDocumentId(documentId: string): void {
   if (!DOCUMENT_PATTERN.test(documentId)) {
     throw new Error("document id must contain 1-128 letters, numbers, underscores, or hyphens");
@@ -208,10 +226,18 @@ export class SqliteOperationStore {
       created_at: string;
     } | undefined;
     if (!row) return undefined;
+    const sequence = Number(row.sequence);
+    const operationCount = Number(row.operation_count);
+    if (!Number.isSafeInteger(sequence) || sequence < 1) {
+      throw new Error("corrupt checkpoint sequence");
+    }
+    if (!Number.isSafeInteger(operationCount) || operationCount < 0) {
+      throw new Error("corrupt checkpoint operation count");
+    }
     return {
-      sequence: Number(row.sequence),
-      snapshot: JSON.parse(row.snapshot) as DocumentSnapshot,
-      operationCount: Number(row.operation_count),
+      sequence,
+      snapshot: checkpointSnapshot(row.snapshot, operationCount),
+      operationCount,
       createdAt: row.created_at,
     };
   }

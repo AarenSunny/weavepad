@@ -33,6 +33,12 @@ This deliberately changes version-history retention: previews older than the
 checkpoint are no longer listed or addressable. It does not change the live
 document, durable cursor monotonicity, or operation identifiers.
 
+Checkpoint reads fail closed when the stored sequence or operation count is
+invalid, the JSON envelope is malformed, or the declared operation count does
+not match the snapshot. These application-level checks catch inconsistent
+checkpoint metadata before reconnect or restart recovery. They do not replace
+SQLite integrity checks, storage checksums, or tested backup restoration.
+
 ## Bounded experiment
 
 ```bash

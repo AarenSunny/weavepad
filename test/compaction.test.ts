@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { SequenceDocument, type Operation } from "../src/crdt.ts";
 import { CollaborationHub } from "../src/sync.ts";
@@ -83,4 +87,63 @@ test("compaction validates its history window and requires a persisted revision"
   assert.throws(() => hub.compact("notes", 0), /between 1 and 100/);
   assert.throws(() => hub.compact("notes", 101), /between 1 and 100/);
   store.close();
+});
+
+test("checkpoint loading rejects corrupt persisted metadata", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "weavepad-checkpoint-corruption-"));
+  const databasePath = join(directory, "documents.db");
+  context.after(() => rm(directory, { recursive: true, force: true }));
+
+  const store = new SqliteOperationStore(databasePath);
+  const hub = new CollaborationHub(store);
+  const author = new SequenceDocument("author");
+  for (const value of ["A", "B", "C"]) {
+    hub.submit("notes", author.localInsert(author.length, value));
+  }
+  hub.compact("notes", 1);
+  store.close();
+
+  const database = new DatabaseSync(databasePath);
+  const valid = database.prepare(`
+    SELECT snapshot, operation_count AS operationCount
+    FROM document_checkpoints WHERE document_id = ?
+  `).get("notes") as { snapshot: string; operationCount: number };
+  database.prepare(`
+    UPDATE document_checkpoints SET operation_count = operation_count + 1
+    WHERE document_id = ?
+  `).run("notes");
+  database.close();
+  const mismatched = new SqliteOperationStore(databasePath);
+  assert.throws(() => mismatched.checkpoint("notes"), /corrupt checkpoint operation count/);
+  mismatched.close();
+
+  const malformedDatabase = new DatabaseSync(databasePath);
+  malformedDatabase.prepare(`
+    UPDATE document_checkpoints SET snapshot = ?, operation_count = 0
+    WHERE document_id = ?
+  `).run("{}", "notes");
+  malformedDatabase.close();
+  const malformed = new SqliteOperationStore(databasePath);
+  assert.throws(() => malformed.checkpoint("notes"), /corrupt checkpoint snapshot envelope/);
+  malformed.close();
+
+  const invalidJsonDatabase = new DatabaseSync(databasePath);
+  invalidJsonDatabase.prepare(`
+    UPDATE document_checkpoints SET snapshot = ?, operation_count = ?
+    WHERE document_id = ?
+  `).run("{", valid.operationCount, "notes");
+  invalidJsonDatabase.close();
+  const invalidJson = new SqliteOperationStore(databasePath);
+  assert.throws(() => invalidJson.checkpoint("notes"), /corrupt checkpoint snapshot JSON/);
+  invalidJson.close();
+
+  const invalidSequenceDatabase = new DatabaseSync(databasePath);
+  invalidSequenceDatabase.prepare(`
+    UPDATE document_checkpoints SET sequence = 0, snapshot = ?, operation_count = ?
+    WHERE document_id = ?
+  `).run(valid.snapshot, valid.operationCount, "notes");
+  invalidSequenceDatabase.close();
+  const invalidSequence = new SqliteOperationStore(databasePath);
+  assert.throws(() => invalidSequence.checkpoint("notes"), /corrupt checkpoint sequence/);
+  invalidSequence.close();
 });
