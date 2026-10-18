@@ -4,13 +4,16 @@ The production server hosts the compiled React editor, WebSocket rooms, health
 endpoint, and SQLite operation log in one process. Browser clients therefore use
 the same origin for HTTP and WebSocket traffic with no CORS configuration.
 
-`GET /health` is the minimal liveness probe. `GET /metrics` returns uncached,
-process-local JSON counters for active and total WebSocket connections,
-received and rejected messages, persisted operations, and uptime. The endpoint
-contains no document IDs, user identities, or payloads. It is intentionally a
-single-process diagnostic rather than durable telemetry; production deployments
-should restrict it at the reverse proxy as appropriate and export centralized
-metrics, traces, and alerts separately.
+`GET /health` is the minimal process-liveness probe. `GET /ready` performs
+lightweight reads against the three required SQLite tables and returns `503`
+when durable collaboration state is unavailable; use it as the traffic
+readiness gate. `GET /metrics` returns uncached, process-local JSON counters for
+active and total WebSocket connections, received and rejected messages,
+persisted operations, and uptime. The endpoint contains no document IDs, user
+identities, or payloads. It is intentionally a single-process diagnostic rather
+than durable telemetry; production deployments should restrict it at the
+reverse proxy as appropriate and export centralized metrics, traces, and alerts
+separately.
 
 ## Docker Compose
 
@@ -23,7 +26,8 @@ keeps `/data/weavepad.db` across container replacements.
 
 The image uses a multi-stage build. Development packages and source UI files do
 not enter the runtime layer, the process runs as the unprivileged `node` user,
-and Docker checks `GET /health` every ten seconds.
+and Docker checks process liveness at `GET /health` every ten seconds. An
+orchestrator should separately route traffic only after `GET /ready` succeeds.
 
 ## Run without containers
 

@@ -372,6 +372,17 @@ export class SqliteOperationStore {
     this.database.close();
   }
 
+  isReady(): boolean {
+    try {
+      this.database.prepare("SELECT 1 FROM operations LIMIT 1").get();
+      this.database.prepare("SELECT 1 FROM revisions LIMIT 1").get();
+      this.database.prepare("SELECT 1 FROM document_checkpoints LIMIT 1").get();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private compactionReport(
     documentId: string,
     checkpoint: StoredCheckpoint,

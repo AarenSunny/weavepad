@@ -20,7 +20,7 @@ preserves deletes that arrive before their corresponding inserts.
 - Durable SQLite operation log with transactional, idempotent writes
 - Revisioned collaborator presence with CRDT-anchored cursors and stale-session expiry
 - Responsive React editor with IndexedDB recovery, offline queuing, and shareable URLs
-- Single-service production image with health checks and persistent SQLite storage
+- Single-service production image with separate liveness and SQLite readiness checks
 - Durable edit-batch history with read-only historical previews
 - Three-replica offline-edit convergence tests
 - Accessible sync-health status, reconnect telemetry, and keyboard-contained

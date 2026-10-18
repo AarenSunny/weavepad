@@ -22,8 +22,9 @@ The ready payload carries the current ephemeral presence roster alongside the
 durable synchronization channel. See [PRESENCE.md](PRESENCE.md) for its separate
 lifecycle and cursor model.
 
-The HTTP endpoint `GET /health` supports container and load-balancer health
-checks.
+The HTTP endpoint `GET /health` reports process liveness. `GET /ready` verifies
+that the required SQLite tables remain readable and is the traffic readiness
+check.
 
 ## Catch-up
 

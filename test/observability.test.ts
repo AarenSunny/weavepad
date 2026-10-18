@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { DatabaseSync } from "node:sqlite";
 import { WebSocket } from "ws";
 import { SequenceDocument } from "../src/crdt.ts";
 import { startSyncServer } from "../src/server.ts";
@@ -15,6 +19,34 @@ interface RuntimeMetrics {
   rejectedMessages: number;
   operationsPersisted: number;
 }
+
+test("readiness distinguishes SQLite availability from process liveness", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "weavepad-readiness-"));
+  const databasePath = join(directory, "documents.db");
+  const server = await startSyncServer({ port: 0, databasePath, staticDirectory: false });
+  const origin = `http://127.0.0.1:${server.port}`;
+  try {
+    const ready = await fetch(`${origin}/ready`);
+    assert.equal(ready.status, 200);
+    assert.equal(ready.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await ready.json(), { status: "ready" });
+
+    const sabotage = new DatabaseSync(databasePath);
+    sabotage.exec("DROP TABLE operations");
+    sabotage.close();
+
+    const unavailable = await fetch(`${origin}/ready`);
+    assert.equal(unavailable.status, 503);
+    assert.deepEqual(await unavailable.json(), { status: "unavailable" });
+
+    const live = await fetch(`${origin}/health`);
+    assert.equal(live.status, 200);
+    assert.deepEqual(await live.json(), { status: "ok" });
+  } finally {
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("runtime metrics expose aggregate connection and protocol health", async (context) => {
   const server = await startSyncServer({ port: 0, databasePath: ":memory:", staticDirectory: false });

@@ -91,6 +91,15 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
       response.end(JSON.stringify({ status: "ok" }));
       return;
     }
+    if (request.method === "GET" && request.url === "/ready") {
+      const ready = store.isReady();
+      response.writeHead(ready ? 200 : 503, {
+        "cache-control": "no-store",
+        "content-type": "application/json",
+      });
+      response.end(JSON.stringify({ status: ready ? "ready" : "unavailable" }));
+      return;
+    }
     if (request.method === "GET" && request.url === "/metrics") {
       response.writeHead(200, {
         "cache-control": "no-store",
