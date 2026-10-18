@@ -1,0 +1,1 @@
+export const MAX_OPERATIONS_PER_MESSAGE = 1_000;

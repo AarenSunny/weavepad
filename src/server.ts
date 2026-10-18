@@ -5,6 +5,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { handleApi } from "./api.ts";
 import type { Operation } from "./crdt.ts";
 import { PresenceManager, type PresenceProfile, type PresenceSelection } from "./presence.ts";
+import { MAX_OPERATIONS_PER_MESSAGE } from "./protocol.ts";
 import { CollaborationHub, type SyncBatch } from "./sync.ts";
 import { SqliteOperationStore, validateDocumentId } from "./store.ts";
 import { serveStatic } from "./static.ts";
@@ -30,8 +31,6 @@ interface ClientHeartbeatMessage {
 }
 
 type ClientMessage = ClientSyncMessage | ClientOperationsMessage | ClientPresenceMessage | ClientHeartbeatMessage;
-
-const MAX_OPERATIONS_PER_MESSAGE = 1_000;
 
 export interface SyncServer {
   http: HttpServer;

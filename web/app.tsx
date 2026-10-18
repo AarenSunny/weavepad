@@ -4,6 +4,7 @@ import type { PresenceParticipant, PresenceProfile, PresenceSelection } from "..
 import { AVATAR_COLORS, avatarTextColor } from "./color-contrast.ts";
 import { applyTextChange, cursorAnchor } from "./editor-state.ts";
 import { IndexedDbDocumentStore } from "./offline-store.ts";
+import { operationBatches } from "./operation-batches.ts";
 import { recentTimeLabel, reconnectDelayMs, syncProgressLabel, type ConnectionStatus } from "./sync-health.ts";
 
 interface StoredWireOperation {
@@ -51,6 +52,12 @@ function websocketUrl(documentId: string): string {
 
 function initials(name: string): string {
   return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function sendOperationBatches(socket: WebSocket, operations: readonly Operation[]): void {
+  for (const batch of operationBatches(operations)) {
+    socket.send(JSON.stringify({ type: "operations", operations: batch }));
+  }
 }
 
 export function App() {
@@ -206,7 +213,7 @@ export function App() {
             setConnectionError("");
             persistDocument();
             if (message.type === "sync" && pendingRef.current.length > 0) {
-              socket.send(JSON.stringify({ type: "operations", operations: pendingRef.current }));
+              sendOperationBatches(socket, pendingRef.current);
             }
           } else if (message.type === "error") {
             setConnectionError(String(message.message ?? "The sync service rejected a message."));
@@ -254,7 +261,7 @@ export function App() {
     flushTimerRef.current = window.setTimeout(() => {
       const socket = socketRef.current;
       if (socket?.readyState === WebSocket.OPEN && pendingRef.current.length > 0) {
-        socket.send(JSON.stringify({ type: "operations", operations: pendingRef.current }));
+        sendOperationBatches(socket, pendingRef.current);
       }
     }, 350);
   };
