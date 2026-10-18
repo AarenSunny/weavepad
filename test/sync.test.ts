@@ -153,6 +153,23 @@ test("protocol errors are isolated to the offending message", async (context) =>
   assert.equal((await client.inbox.next()).type, "sync");
 });
 
+test("oversized operation batches are rejected without closing the room", async (context) => {
+  const server = await startSyncServer({ port: 0, databasePath: ":memory:" });
+  context.after(() => server.close());
+  const client = await connect(server, "bounded-room");
+  context.after(() => closeSocket(client.socket));
+
+  client.socket.send(JSON.stringify({ type: "operations", operations: Array(1_001).fill(null) }));
+  const rejected = await client.inbox.next();
+  assert.equal(rejected.type, "error");
+  assert.match(rejected.message, /exceeds 1000 operations/);
+
+  client.socket.send(JSON.stringify({ type: "sync", after: 0 }));
+  const recovered = await client.inbox.next();
+  assert.equal(recovered.type, "sync");
+  assert.deepEqual(recovered.operations, []);
+});
+
 test("presence updates reach the room and disconnects remove the participant", async (context) => {
   const server = await startSyncServer({ port: 0, databasePath: ":memory:" });
   context.after(() => server.close());

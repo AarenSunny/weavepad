@@ -84,9 +84,12 @@ operations in one SQLite transaction, and only then broadcasts an `operations`
 message to every connected client. Identical replays are no-ops; an identifier
 reused with another payload is rejected.
 
-The WebSocket layer limits messages to 1 MiB. Malformed messages receive a
-structured `error` response without terminating the room or affecting other
-clients.
+The WebSocket layer limits messages to 1 MiB and enforces the documented
+1,000-operation batch cap before opening a SQLite transaction. Malformed or
+oversized messages receive a structured `error` response without terminating
+the room or affecting other clients. These per-message bounds are not
+per-client rate limiting, admission control, or backpressure; those remain
+deployment concerns for an internet-facing service.
 
 ## Durability boundary
 

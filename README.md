@@ -17,6 +17,7 @@ preserves deletes that arrive before their corresponding inserts.
 - Idempotent operation replay and conflicting-operation detection
 - Snapshots and per-replica version vectors
 - WebSocket rooms with live operation broadcasts and reconnect catch-up
+- Bounded WebSocket operation batches with isolated protocol errors
 - Durable SQLite operation log with transactional, idempotent writes
 - Revisioned collaborator presence with CRDT-anchored cursors and stale-session expiry
 - Responsive React editor with IndexedDB recovery, offline queuing, and shareable URLs

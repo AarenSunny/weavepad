@@ -31,6 +31,8 @@ interface ClientHeartbeatMessage {
 
 type ClientMessage = ClientSyncMessage | ClientOperationsMessage | ClientPresenceMessage | ClientHeartbeatMessage;
 
+const MAX_OPERATIONS_PER_MESSAGE = 1_000;
+
 export interface SyncServer {
   http: HttpServer;
   hub: CollaborationHub;
@@ -155,6 +157,10 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
         if (message?.type === "sync") {
           send(socket, wireBatch("sync", hub.sync(documentId, message.after ?? 0)));
         } else if (message?.type === "operations") {
+          if (!Array.isArray(message.operations)) throw new Error("operations must be an array");
+          if (message.operations.length > MAX_OPERATIONS_PER_MESSAGE) {
+            throw new Error(`operation batch exceeds ${MAX_OPERATIONS_PER_MESSAGE} operations`);
+          }
           const batch = hub.submit(documentId, message.operations);
           metrics.operationsPersisted += batch.operations.length;
         } else if (message?.type === "presence") {
