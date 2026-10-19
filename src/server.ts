@@ -162,6 +162,20 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
           }
           const batch = hub.submit(documentId, message.operations);
           metrics.operationsPersisted += batch.operations.length;
+          const storedIds = new Set(batch.operations.map((entry) => entry.operation.id));
+          const replayedIds = Array.from(new Set(
+            message.operations
+              .map((operation) => operation.id)
+              .filter((id) => !storedIds.has(id)),
+          ));
+          if (replayedIds.length > 0) {
+            send(socket, {
+              type: "ack",
+              documentId,
+              cursor: batch.cursor,
+              operationIds: replayedIds,
+            });
+          }
         } else if (message?.type === "presence") {
           presence.update(documentId, sessionId, message.user, message.selection);
         } else if (message?.type === "heartbeat") {

@@ -19,6 +19,7 @@ preserves deletes that arrive before their corresponding inserts.
 - WebSocket rooms with live operation broadcasts and reconnect catch-up
 - Bounded WebSocket operation batches with isolated protocol errors
 - Durable SQLite operation log with transactional, idempotent writes
+- Explicit acknowledgements for durable no-op replays from offline queues
 - Revisioned collaborator presence with CRDT-anchored cursors and stale-session expiry
 - Responsive React editor with IndexedDB recovery, offline queuing, and shareable URLs
 - Single-service production image with separate liveness and SQLite readiness checks

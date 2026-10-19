@@ -82,7 +82,18 @@ Clients send up to 1,000 operations in a batch:
 The hub validates the entire batch against a copy of the current CRDT, writes new
 operations in one SQLite transaction, and only then broadcasts an `operations`
 message to every connected client. Identical replays are no-ops; an identifier
-reused with another payload is rejected.
+reused with another payload is rejected. If a submitted operation was already
+durable, the server returns an `ack` containing that operation ID. This lets a
+client clear replayed pending work even though a no-op does not create a second
+broadcast or revision.
+
+```json
+{"type":"ack","documentId":"demo","cursor":45,"operationIds":["alice:12"]}
+```
+
+An acknowledgement confirms only that the IDs are durable on this server. It
+does not prove that every connected replica has rendered them, and it is not a
+flow-control signal.
 
 The WebSocket layer limits messages to 1 MiB and enforces the documented
 1,000-operation batch cap before opening a SQLite transaction. The browser

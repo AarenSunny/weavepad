@@ -8,3 +8,11 @@ export function operationBatches(operations: readonly Operation[]): Operation[][
   }
   return batches;
 }
+
+export function removeAcknowledgedOperations(
+  operations: readonly Operation[],
+  acknowledgedIds: Iterable<string>,
+): Operation[] {
+  const acknowledged = new Set(acknowledgedIds);
+  return operations.filter((operation) => !acknowledged.has(operation.id));
+}

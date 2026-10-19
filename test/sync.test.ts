@@ -95,6 +95,29 @@ test("a reconnecting client catches up from its last durable cursor", async (con
   assert.ok(catchUp.cursor > first.cursor);
 });
 
+test("a durable operation replay receives an explicit acknowledgement", async (context) => {
+  const server = await startSyncServer({ port: 0, databasePath: ":memory:" });
+  context.after(() => server.close());
+  const client = await connect(server, "replay-ack");
+  context.after(() => closeSocket(client.socket));
+
+  const document = new SequenceDocument("author");
+  const operations = document.localInsert(0, "A");
+  client.socket.send(JSON.stringify({ type: "operations", operations }));
+  const accepted = await client.inbox.next();
+  assert.equal(accepted.type, "operations");
+
+  client.socket.send(JSON.stringify({ type: "operations", operations }));
+  const replayed = await client.inbox.next();
+  assert.deepEqual(replayed, {
+    type: "ack",
+    documentId: "replay-ack",
+    cursor: accepted.cursor,
+    operationIds: [operations[0].id],
+  });
+  assert.equal(server.hub.history("replay-ack").length, 1);
+});
+
 test("a client behind compaction receives a checkpoint before remaining operations", async (context) => {
   const server = await startSyncServer({ port: 0, databasePath: ":memory:" });
   context.after(() => server.close());

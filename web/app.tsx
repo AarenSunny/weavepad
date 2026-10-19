@@ -4,7 +4,7 @@ import type { PresenceParticipant, PresenceProfile, PresenceSelection } from "..
 import { AVATAR_COLORS, avatarTextColor } from "./color-contrast.ts";
 import { applyTextChange, cursorAnchor } from "./editor-state.ts";
 import { IndexedDbDocumentStore } from "./offline-store.ts";
-import { operationBatches } from "./operation-batches.ts";
+import { operationBatches, removeAcknowledgedOperations } from "./operation-batches.ts";
 import { recentTimeLabel, reconnectDelayMs, syncProgressLabel, type ConnectionStatus } from "./sync-health.ts";
 
 interface StoredWireOperation {
@@ -200,11 +200,11 @@ export function App() {
               documentRef.current.apply(entry.operation);
               cursorRef.current = Math.max(cursorRef.current, entry.sequence);
             }
-            const accepted = new Set([
+            const accepted = [
               ...(checkpoint?.operations.map((operation) => operation.id) ?? []),
               ...entries.map((entry) => entry.operation.id),
-            ]);
-            pendingRef.current = pendingRef.current.filter((operation) => !accepted.has(operation.id));
+            ];
+            pendingRef.current = removeAcknowledgedOperations(pendingRef.current, accepted);
             setPendingCount(pendingRef.current.length);
             const materialized = documentRef.current.toString();
             textRef.current = materialized;
@@ -215,6 +215,19 @@ export function App() {
             if (message.type === "sync" && pendingRef.current.length > 0) {
               sendOperationBatches(socket, pendingRef.current);
             }
+          } else if (message.type === "ack") {
+            if (!Array.isArray(message.operationIds) ||
+                !message.operationIds.every((id: unknown) => typeof id === "string")) {
+              throw new Error("The sync service sent an invalid acknowledgement.");
+            }
+            pendingRef.current = removeAcknowledgedOperations(
+              pendingRef.current,
+              message.operationIds as string[],
+            );
+            setPendingCount(pendingRef.current.length);
+            setLastSyncedAt(Date.now());
+            setConnectionError("");
+            persistDocument();
           } else if (message.type === "error") {
             setConnectionError(String(message.message ?? "The sync service rejected a message."));
           }
