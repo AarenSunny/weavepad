@@ -40,6 +40,12 @@ immediately; the TTL handles crashed processes and broken network paths.
 Presence never enters SQLite or the CRDT operation log. After a server restart,
 clients reconnect and announce themselves again.
 
+The browser stores its display identity locally so a reload keeps the same
+replica presentation. Stored JSON is validated against the server's public
+profile shape before use. Invalid JSON, invalid fields, or blocked browser
+storage falls back to a fresh in-memory guest identity instead of preventing
+the editor from starting. This fallback is not an authenticated account.
+
 ## Trust boundary
 
 The server validates names, colors, identifiers, and cursor anchors. Authentication

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { SequenceDocument, type Operation } from "../src/crdt.ts";
-import type { PresenceParticipant, PresenceProfile, PresenceSelection } from "../src/presence.ts";
-import { AVATAR_COLORS, avatarTextColor } from "./color-contrast.ts";
+import type { PresenceParticipant, PresenceSelection } from "../src/presence.ts";
+import { avatarTextColor } from "./color-contrast.ts";
 import { applyTextChange, cursorAnchor } from "./editor-state.ts";
+import { loadIdentity, saveIdentity } from "./identity.ts";
 import { IndexedDbDocumentStore } from "./offline-store.ts";
 import { operationBatches, removeAcknowledgedOperations } from "./operation-batches.ts";
 import { recentTimeLabel, reconnectDelayMs, syncProgressLabel, type ConnectionStatus } from "./sync-health.ts";
@@ -23,19 +24,6 @@ interface DocumentRevision {
   operationCount: number;
   actors: string[];
   createdAt: string;
-}
-
-function identity(): PresenceProfile {
-  const stored = localStorage.getItem("weavepad.identity");
-  if (stored) return JSON.parse(stored) as PresenceProfile;
-  const userId = crypto.randomUUID();
-  const profile = {
-    userId,
-    name: `Guest ${userId.slice(0, 4).toUpperCase()}`,
-    color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
-  };
-  localStorage.setItem("weavepad.identity", JSON.stringify(profile));
-  return profile;
 }
 
 function documentFromLocation(): string {
@@ -72,7 +60,7 @@ export function App() {
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
   const historyCloseRef = useRef<HTMLButtonElement | null>(null);
   const historyDialogRef = useRef<HTMLElement | null>(null);
-  const [profile, setProfile] = useState(identity);
+  const [profile, setProfile] = useState(loadIdentity);
   const profileRef = useRef(profile);
   const [text, setText] = useState("");
   const textRef = useRef(text);
@@ -144,7 +132,7 @@ export function App() {
 
   useEffect(() => {
     profileRef.current = profile;
-    localStorage.setItem("weavepad.identity", JSON.stringify(profile));
+    saveIdentity(profile);
     sendPresence();
   }, [profile, sendPresence]);
 
