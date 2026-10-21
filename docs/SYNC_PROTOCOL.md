@@ -93,7 +93,9 @@ broadcast or revision.
 
 An acknowledgement confirms only that the IDs are durable on this server. It
 does not prove that every connected replica has rendered them, and it is not a
-flow-control signal.
+flow-control signal. The browser also advances its durable reconnect cursor from
+the acknowledgement after processing earlier WebSocket frames, so replay-only
+batches do not leave it requesting an already confirmed history prefix.
 
 The WebSocket layer limits messages to 1 MiB and enforces the documented
 1,000-operation batch cap before opening a SQLite transaction. The browser

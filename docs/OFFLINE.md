@@ -20,6 +20,9 @@ that catch-up, and submits the saved pending queue in ordered batches of at most
 offline session. If the cursor predates a server checkpoint, the client merges
 its complete operation set before later rows. Duplicate operations remain safe
 because both the CRDT and server store are idempotent.
+Operation broadcasts, catch-up responses, and durable replay acknowledgements
+all advance the saved cursor monotonically; malformed, fractional, negative, or
+unsafe cursor values are rejected instead of poisoning IndexedDB recovery state.
 
 This order avoids two common recovery bugs: overwriting local offline edits with
 a server snapshot, and generating new operations under a different replica ID

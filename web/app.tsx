@@ -6,6 +6,7 @@ import { applyTextChange, cursorAnchor } from "./editor-state.ts";
 import { loadIdentity, saveIdentity } from "./identity.ts";
 import { IndexedDbDocumentStore } from "./offline-store.ts";
 import { operationBatches, removeAcknowledgedOperations } from "./operation-batches.ts";
+import { advanceSyncCursor } from "./sync-cursor.ts";
 import { recentTimeLabel, reconnectDelayMs, syncProgressLabel, type ConnectionStatus } from "./sync-health.ts";
 
 interface StoredWireOperation {
@@ -178,16 +179,21 @@ export function App() {
           } else if (message.type === "presence") {
             setParticipants(message.participants as PresenceParticipant[]);
           } else if (message.type === "sync" || message.type === "operations") {
+            if (!Array.isArray(message.operations)) {
+              throw new Error("The sync service sent an invalid operation batch.");
+            }
             const entries = message.operations as StoredWireOperation[];
             const checkpoint = message.checkpoint as WireCheckpoint | undefined;
+            let nextCursor = advanceSyncCursor(cursorRef.current, message.cursor);
+            if (checkpoint) nextCursor = advanceSyncCursor(nextCursor, checkpoint.sequence);
+            for (const entry of entries) nextCursor = advanceSyncCursor(nextCursor, entry.sequence);
             if (checkpoint) {
               documentRef.current.merge(checkpoint.operations);
-              cursorRef.current = Math.max(cursorRef.current, checkpoint.sequence);
             }
             for (const entry of entries) {
               documentRef.current.apply(entry.operation);
-              cursorRef.current = Math.max(cursorRef.current, entry.sequence);
             }
+            cursorRef.current = nextCursor;
             const accepted = [
               ...(checkpoint?.operations.map((operation) => operation.id) ?? []),
               ...entries.map((entry) => entry.operation.id),
@@ -208,10 +214,12 @@ export function App() {
                 !message.operationIds.every((id: unknown) => typeof id === "string")) {
               throw new Error("The sync service sent an invalid acknowledgement.");
             }
+            const nextCursor = advanceSyncCursor(cursorRef.current, message.cursor);
             pendingRef.current = removeAcknowledgedOperations(
               pendingRef.current,
               message.operationIds as string[],
             );
+            cursorRef.current = nextCursor;
             setPendingCount(pendingRef.current.length);
             setLastSyncedAt(Date.now());
             setConnectionError("");
