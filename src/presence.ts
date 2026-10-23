@@ -37,20 +37,22 @@ const COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 const POSITION_PATTERN = /^(ROOT|[A-Za-z0-9_-]{1,64}:[1-9][0-9]*)$/;
 
 function validateProfile(profile: PresenceProfile): void {
-  if (!profile || !USER_ID_PATTERN.test(profile.userId)) {
+  if (!profile || typeof profile !== "object" || Array.isArray(profile) ||
+      typeof profile.userId !== "string" || !USER_ID_PATTERN.test(profile.userId)) {
     throw new Error("presence userId must contain 1-128 letters, numbers, underscores, or hyphens");
   }
   if (typeof profile.name !== "string" || profile.name.trim().length < 1 || profile.name.length > 80) {
     throw new Error("presence name must contain 1-80 characters");
   }
-  if (!COLOR_PATTERN.test(profile.color)) {
+  if (typeof profile.color !== "string" || !COLOR_PATTERN.test(profile.color)) {
     throw new Error("presence color must be a six-digit hex color");
   }
 }
 
 function validateSelection(selection: PresenceSelection | null): void {
   if (selection === null) return;
-  if (!selection || !("anchor" in selection) || !("focus" in selection)) {
+  if (!selection || typeof selection !== "object" || Array.isArray(selection) ||
+      !("anchor" in selection) || !("focus" in selection)) {
     throw new Error("presence selection must include anchor and focus");
   }
   for (const position of [selection.anchor, selection.focus]) {

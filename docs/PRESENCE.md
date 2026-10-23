@@ -48,6 +48,7 @@ the editor from starting. This fallback is not an authenticated account.
 
 ## Trust boundary
 
-The server validates names, colors, identifiers, and cursor anchors. Authentication
+The server validates the exact runtime JSON types and allowed values for names,
+colors, identifiers, and cursor anchors before publishing a roster. Authentication
 and signed document membership are later milestones, so the current `userId` is a
 display identity rather than a verified account claim.

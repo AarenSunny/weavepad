@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PresenceManager, type PresenceSnapshot } from "../src/presence.ts";
+import {
+  PresenceManager,
+  type PresenceProfile,
+  type PresenceSelection,
+  type PresenceSnapshot,
+} from "../src/presence.ts";
 
 const alice = { userId: "alice", name: "Alice", color: "#7c3aed" };
 
@@ -53,8 +58,21 @@ test("expired sessions are removed together in one new revision", () => {
 test("invalid profiles and cursor anchors are rejected", () => {
   const manager = new PresenceManager();
   assert.throws(
+    () => manager.update(
+      "design",
+      "session-a",
+      { ...alice, userId: 7 } as unknown as PresenceProfile,
+      null,
+    ),
+    /userId/,
+  );
+  assert.throws(
     () => manager.update("design", "session-a", { ...alice, color: "purple" }, null),
     /hex color/,
+  );
+  assert.throws(
+    () => manager.update("design", "session-a", alice, 7 as unknown as PresenceSelection),
+    /anchor and focus/,
   );
   assert.throws(
     () => manager.update("design", "session-a", alice, { anchor: "numeric-index", focus: null }),

@@ -226,3 +226,29 @@ test("presence updates reach the room and disconnects remove the participant", a
   assert.deepEqual(afterDisconnect.participants, []);
   assert.ok(afterDisconnect.revision > bobRoster.revision);
 });
+
+test("malformed presence JSON is rejected without contaminating the room", async (context) => {
+  const server = await startSyncServer({ port: 0, databasePath: ":memory:" });
+  context.after(() => server.close());
+  const client = await connect(server, "presence-validation");
+  context.after(() => closeSocket(client.socket));
+
+  client.socket.send(JSON.stringify({
+    type: "presence",
+    user: { userId: 7, name: "Numeric identity", color: "#7c3aed" },
+    selection: null,
+  }));
+  const rejected = await client.inbox.next();
+  assert.equal(rejected.type, "error");
+  assert.match(rejected.message, /userId/);
+  assert.deepEqual(server.presence.snapshot("presence-validation").participants, []);
+
+  client.socket.send(JSON.stringify({
+    type: "presence",
+    user: { userId: "alice", name: "Alice", color: "#7c3aed" },
+    selection: null,
+  }));
+  const recovered = await client.inbox.next();
+  assert.equal(recovered.type, "presence");
+  assert.equal(recovered.participants[0].userId, "alice");
+});
