@@ -133,4 +133,14 @@ test("invalid indices and malformed remote operations are rejected", () => {
   assert.throws(() => document.apply({
     kind: "insert", id: "mallory:1", actor: "mallory", counter: 2, after: "ROOT", value: "X",
   }), /does not match/);
+  assert.throws(() => document.apply({
+    kind: "insert", id: "mallory:1", actor: "mallory", counter: 1, after: "ROOT", value: 7,
+  } as unknown as Operation), /one grapheme/);
+  assert.throws(() => document.apply({
+    kind: "insert", id: "7:1", actor: 7, counter: 1, after: "ROOT", value: "X",
+  } as unknown as Operation), /actor or counter/);
+  assert.throws(() => document.apply({
+    kind: "delete", id: "mallory:2", actor: "mallory", counter: 2, target: 7,
+  } as unknown as Operation), /delete operation target/);
+  assert.equal(document.toString(), "");
 });

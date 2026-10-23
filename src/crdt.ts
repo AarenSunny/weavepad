@@ -206,21 +206,26 @@ export class SequenceDocument {
   }
 
   private validate(operation: Operation): void {
-    if (!operation || (operation.kind !== "insert" && operation.kind !== "delete")) {
+    if (!operation || typeof operation !== "object" ||
+        (operation.kind !== "insert" && operation.kind !== "delete")) {
       throw new Error("unsupported operation");
     }
-    if (!ACTOR_PATTERN.test(operation.actor) || !Number.isSafeInteger(operation.counter) || operation.counter < 1) {
+    if (typeof operation.actor !== "string" || !ACTOR_PATTERN.test(operation.actor) ||
+        !Number.isSafeInteger(operation.counter) || operation.counter < 1) {
       throw new Error("invalid operation actor or counter");
     }
-    if (operation.id !== operationId(operation.actor, operation.counter)) {
+    if (typeof operation.id !== "string" ||
+        operation.id !== operationId(operation.actor, operation.counter)) {
       throw new Error("operation id does not match actor and counter");
     }
     if (operation.kind === "insert") {
+      if (typeof operation.after !== "string") throw new Error("invalid insert operation anchor");
       if (operation.after !== ROOT_ID) parseId(operation.after);
-      if (splitGraphemes(operation.value).length !== 1) {
+      if (typeof operation.value !== "string" || splitGraphemes(operation.value).length !== 1) {
         throw new Error("insert operations must contain exactly one grapheme");
       }
     } else {
+      if (typeof operation.target !== "string") throw new Error("invalid delete operation target");
       parseId(operation.target);
     }
   }

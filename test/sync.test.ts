@@ -172,8 +172,17 @@ test("protocol errors are isolated to the offending message", async (context) =>
 
   client.socket.send(JSON.stringify({ type: "mystery" }));
   assert.match((await client.inbox.next()).message, /unsupported/);
+  client.socket.send(JSON.stringify({
+    type: "operations",
+    operations: [{
+      kind: "insert", id: "mallory:1", actor: "mallory", counter: 1, after: "ROOT", value: 7,
+    }],
+  }));
+  assert.match((await client.inbox.next()).message, /one grapheme/);
   client.socket.send(JSON.stringify({ type: "sync", after: 0 }));
-  assert.equal((await client.inbox.next()).type, "sync");
+  const recovered = await client.inbox.next();
+  assert.equal(recovered.type, "sync");
+  assert.deepEqual(recovered.operations, []);
 });
 
 test("oversized operation batches are rejected without closing the room", async (context) => {

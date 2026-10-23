@@ -16,6 +16,10 @@ after every received operation before issuing another local operation. This give
 locally generated identifiers a stable causal ordering while the actor name
 breaks ties between concurrent operations.
 
+Incoming JSON is checked at runtime as well as by TypeScript: identifiers,
+actors, anchors, targets, and inserted graphemes must have their exact string or
+integer types before an operation can enter memory or SQLite.
+
 ## Materializing text
 
 The document builds an adjacency list from every insert's anchor. Inserts sharing
