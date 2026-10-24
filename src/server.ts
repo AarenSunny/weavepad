@@ -52,6 +52,7 @@ export interface SyncServerOptions {
 interface RuntimeMetrics {
   startedAt: number;
   totalConnections: number;
+  transportErrors: number;
   messagesReceived: number;
   rejectedMessages: number;
   operationsPersisted: number;
@@ -81,6 +82,7 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
   const metrics: RuntimeMetrics = {
     startedAt: Date.now(),
     totalConnections: 0,
+    transportErrors: 0,
     messagesReceived: 0,
     rejectedMessages: 0,
     operationsPersisted: 0,
@@ -114,6 +116,7 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
         uptimeSeconds: Math.max(0, Math.floor((Date.now() - metrics.startedAt) / 1_000)),
         activeConnections: sockets.size,
         totalConnections: metrics.totalConnections,
+        transportErrors: metrics.transportErrors,
         messagesReceived: metrics.messagesReceived,
         rejectedMessages: metrics.rejectedMessages,
         operationsPersisted: metrics.operationsPersisted,
@@ -151,6 +154,9 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
     const unsubscribePresence = presence.subscribe(documentId, (snapshot) => send(socket, snapshot));
     send(socket, { type: "ready", documentId, sessionId, presence: presence.snapshot(documentId) });
 
+    socket.on("error", () => {
+      metrics.transportErrors += 1;
+    });
     socket.on("message", (data, isBinary) => {
       metrics.messagesReceived += 1;
       try {

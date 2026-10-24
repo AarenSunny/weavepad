@@ -11,15 +11,14 @@ inside the configured editor directory.
 `GET /health` is the minimal process-liveness probe. Both probe responses
 disable HTTP caching so an intermediary cannot reuse stale health state.
 `GET /ready` performs lightweight reads against the three required SQLite tables
-and returns `503`
-when durable collaboration state is unavailable; use it as the traffic
-readiness gate. `GET /metrics` returns uncached, process-local JSON counters for
-active and total WebSocket connections, received and rejected messages,
-persisted operations, and uptime. The endpoint contains no document IDs, user
-identities, or payloads. It is intentionally a single-process diagnostic rather
-than durable telemetry; production deployments should restrict it at the
-reverse proxy as appropriate and export centralized metrics, traces, and alerts
-separately.
+and returns `503` when durable collaboration state is unavailable. Use it as the
+traffic readiness gate. `GET /metrics` returns uncached, process-local JSON counters for
+active and total WebSocket connections, transport errors, received and rejected
+messages, persisted operations, and uptime. The endpoint contains no document
+IDs, user identities, or payloads. It is intentionally a single-process
+diagnostic rather than durable telemetry; production deployments should restrict
+it at the reverse proxy as appropriate and export centralized metrics, traces,
+and alerts separately.
 
 ## Docker Compose
 

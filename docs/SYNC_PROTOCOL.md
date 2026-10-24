@@ -101,9 +101,11 @@ The WebSocket layer limits messages to 1 MiB and enforces the documented
 1,000-operation batch cap before opening a SQLite transaction. The browser
 splits its pending queue at the same cap while preserving operation order, so a
 long offline session does not create an immediately rejected reconnect message.
-Malformed or oversized messages receive a structured `error` response without
-terminating the room or affecting other clients. These per-message bounds are
-not per-client rate limiting, admission control, or backpressure; those remain
+Malformed messages and operation batches over the batch cap receive a structured
+`error` response without terminating the room. A frame over the 1 MiB transport
+cap closes only the offending connection and increments the transport-error
+metric; the process and other rooms remain available. These bounds are not
+per-client rate limiting, admission control, or backpressure; those remain
 deployment concerns for an internet-facing service.
 
 ## Durability boundary

@@ -15,6 +15,7 @@ interface RuntimeMetrics {
   uptimeSeconds: number;
   activeConnections: number;
   totalConnections: number;
+  transportErrors: number;
   messagesReceived: number;
   rejectedMessages: number;
   operationsPersisted: number;
@@ -61,6 +62,7 @@ test("runtime metrics expose aggregate connection and protocol health", async (c
   assert.ok(initial.uptimeSeconds >= 0);
   assert.equal(initial.activeConnections, 0);
   assert.equal(initial.totalConnections, 0);
+  assert.equal(initial.transportErrors, 0);
   assert.equal(initial.messagesReceived, 0);
   assert.equal(initial.rejectedMessages, 0);
   assert.equal(initial.operationsPersisted, 0);
@@ -98,4 +100,31 @@ test("runtime metrics expose aggregate connection and protocol health", async (c
   }
   assert.equal(closed.activeConnections, 0);
   assert.equal(closed.totalConnections, 1);
+});
+
+test("oversized WebSocket frames are isolated and counted", async (context) => {
+  const server = await startSyncServer({ port: 0, databasePath: ":memory:", staticDirectory: false });
+  context.after(() => server.close());
+  const origin = `http://127.0.0.1:${server.port}`;
+  const socket = new WebSocket(`ws://127.0.0.1:${server.port}/documents/payload-limit`);
+  const readyMessage = once(socket, "message");
+  await once(socket, "open");
+  await readyMessage;
+
+  const closedEvent = once(socket, "close");
+  socket.send("x".repeat(1_048_577));
+  await closedEvent;
+
+  let metrics = await fetch(`${origin}/metrics`).then((response) => response.json()) as RuntimeMetrics;
+  for (let attempt = 0; attempt < 20 && metrics.transportErrors !== 1; attempt += 1) {
+    await delay(5);
+    metrics = await fetch(`${origin}/metrics`).then((response) => response.json()) as RuntimeMetrics;
+  }
+  assert.equal(metrics.activeConnections, 0);
+  assert.equal(metrics.totalConnections, 1);
+  assert.equal(metrics.transportErrors, 1);
+  assert.equal(metrics.messagesReceived, 0);
+
+  const health = await fetch(`${origin}/health`);
+  assert.equal(health.status, 200);
 });
