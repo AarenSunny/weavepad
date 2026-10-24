@@ -41,6 +41,7 @@ test("readiness distinguishes SQLite availability from process liveness", async 
 
     const live = await fetch(`${origin}/health`);
     assert.equal(live.status, 200);
+    assert.equal(live.headers.get("cache-control"), "no-store");
     assert.deepEqual(await live.json(), { status: "ok" });
   } finally {
     await server.close();

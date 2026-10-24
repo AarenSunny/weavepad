@@ -8,8 +8,10 @@ paths under `/assets/` return `404` so a stale bundle request cannot be cached a
 the application shell. Resolved static paths, including symbolic links, must stay
 inside the configured editor directory.
 
-`GET /health` is the minimal process-liveness probe. `GET /ready` performs
-lightweight reads against the three required SQLite tables and returns `503`
+`GET /health` is the minimal process-liveness probe. Both probe responses
+disable HTTP caching so an intermediary cannot reuse stale health state.
+`GET /ready` performs lightweight reads against the three required SQLite tables
+and returns `503`
 when durable collaboration state is unavailable; use it as the traffic
 readiness gate. `GET /metrics` returns uncached, process-local JSON counters for
 active and total WebSocket connections, received and rejected messages,

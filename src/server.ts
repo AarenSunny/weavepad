@@ -88,7 +88,10 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: 1_048_576 });
   const http = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/health") {
-      response.writeHead(200, { "content-type": "application/json" });
+      response.writeHead(200, {
+        "cache-control": "no-store",
+        "content-type": "application/json",
+      });
       response.end(JSON.stringify({ status: "ok" }));
       return;
     }
