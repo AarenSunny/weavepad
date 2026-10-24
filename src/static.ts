@@ -1,7 +1,7 @@
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { extname, isAbsolute, relative, resolve } from "node:path";
+import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 
 const CONTENT_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
@@ -15,11 +15,24 @@ const CONTENT_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
+class StaticPathEscapeError extends Error {}
+
+function isWithinRoot(root: string, candidate: string): boolean {
+  const withinRoot = relative(root, candidate);
+  return withinRoot !== ".." && !withinRoot.startsWith(`..${sep}`) && !isAbsolute(withinRoot);
+}
+
 function safePath(root: string, requestPath: string): string | null {
   const candidate = resolve(root, requestPath);
-  const withinRoot = relative(root, candidate);
-  if (withinRoot.startsWith("..") || isAbsolute(withinRoot)) return null;
-  return candidate;
+  return isWithinRoot(root, candidate) ? candidate : null;
+}
+
+async function regularFile(root: string, candidate: string): Promise<string> {
+  const canonical = await realpath(candidate);
+  if (!isWithinRoot(root, canonical)) throw new StaticPathEscapeError();
+  const metadata = await stat(canonical);
+  if (!metadata.isFile()) throw new Error("not a file");
+  return canonical;
 }
 
 export async function serveStatic(
@@ -37,7 +50,12 @@ export async function serveStatic(
     return true;
   }
 
-  const root = resolve(directory);
+  let root: string;
+  try {
+    root = await realpath(resolve(directory));
+  } catch {
+    return false;
+  }
   const requested = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
   let file = safePath(root, requested);
   if (!file) {
@@ -46,16 +64,22 @@ export async function serveStatic(
   }
 
   try {
-    const metadata = await stat(file);
-    if (!metadata.isFile()) throw new Error("not a file");
-  } catch {
+    file = await regularFile(root, file);
+  } catch (error) {
+    if (error instanceof StaticPathEscapeError) {
+      response.writeHead(403).end();
+      return true;
+    }
     if (requested.startsWith("assets/") || extname(requested)) return false;
     file = safePath(root, "index.html");
     if (!file) return false;
     try {
-      const fallback = await stat(file);
-      if (!fallback.isFile()) return false;
-    } catch {
+      file = await regularFile(root, file);
+    } catch (fallbackError) {
+      if (fallbackError instanceof StaticPathEscapeError) {
+        response.writeHead(403).end();
+        return true;
+      }
       return false;
     }
   }

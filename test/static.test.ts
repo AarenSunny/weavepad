@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -40,14 +40,25 @@ test("the production server serves the editor and immutable assets", async (cont
 
 test("static serving cannot escape its configured directory", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "weavepad-static-"));
+  const outsideDirectory = await mkdtemp(join(tmpdir(), "weavepad-outside-"));
+  await mkdir(join(directory, "assets"));
   await writeFile(join(directory, "index.html"), "safe");
+  const outsideFile = join(outsideDirectory, "private.txt");
+  await writeFile(outsideFile, "not public");
+  await symlink(outsideFile, join(directory, "assets", "linked-secret"));
   const server = await startSyncServer({ port: 0, databasePath: ":memory:", staticDirectory: directory });
   context.after(async () => {
     await server.close();
     await rm(directory, { recursive: true, force: true });
+    await rm(outsideDirectory, { recursive: true, force: true });
   });
 
-  const response = await fetch(`http://127.0.0.1:${server.port}/..%2Fpackage.json`);
-  assert.equal(response.status, 403);
-  assert.equal(await response.text(), "");
+  const origin = `http://127.0.0.1:${server.port}`;
+  const traversal = await fetch(`${origin}/..%2Fpackage.json`);
+  assert.equal(traversal.status, 403);
+  assert.equal(await traversal.text(), "");
+
+  const linkedSecret = await fetch(`${origin}/assets/linked-secret`);
+  assert.equal(linkedSecret.status, 403);
+  assert.equal(await linkedSecret.text(), "");
 });
