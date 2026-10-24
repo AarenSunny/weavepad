@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { IDBFactory } from "fake-indexeddb";
-import { SequenceDocument } from "../src/crdt.ts";
+import { SequenceDocument, type Operation } from "../src/crdt.ts";
 import { IndexedDbDocumentStore, type OfflineDocumentState } from "../web/offline-store.ts";
 
 test("IndexedDB restores a CRDT snapshot, cursor, actor, and offline queue", async () => {
@@ -44,5 +44,33 @@ test("IndexedDB replaces checkpoints atomically and isolates documents", async (
   assert.equal((await store.load("two"))?.cursor, 0);
   await store.remove("one");
   assert.equal(await store.load("one"), undefined);
+  await store.close();
+});
+
+test("IndexedDB rejects corrupt operations and inconsistent pending queues", async () => {
+  const store = new IndexedDbDocumentStore({ factory: new IDBFactory(), databaseName: "corrupt-test" });
+  const document = new SequenceDocument("alice");
+  const [operation] = document.localInsert(0, "A");
+  const base: OfflineDocumentState = {
+    version: 1,
+    documentId: "notes",
+    actor: document.actor,
+    cursor: 0,
+    operations: document.snapshot().operations,
+    pendingOperations: [operation],
+    savedAt: new Date().toISOString(),
+  };
+
+  await store.save({
+    ...base,
+    operations: [{ ...operation, value: 7 } as unknown as Operation],
+  });
+  assert.equal(await store.load("notes"), undefined);
+
+  await store.save({
+    ...base,
+    pendingOperations: [{ ...operation, value: "B" }],
+  });
+  assert.equal(await store.load("notes"), undefined);
   await store.close();
 });

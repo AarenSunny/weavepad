@@ -34,6 +34,12 @@ If IndexedDB is blocked or unavailable, the editor still connects and works for
 the current page session. The footer reports `Browser storage unavailable`
 instead of making a false durability claim.
 
+Restored records are checked at runtime, including every CRDT operation and the
+requirement that each pending operation exactly matches one in the saved
+snapshot. A corrupt record is ignored so it cannot poison the live replica or be
+sent to the server. WeavePad starts a fresh local replica in that case; it does
+not attempt to salvage a partially corrupt offline checkpoint.
+
 The production bundle is not yet a service worker/PWA. IndexedDB restores data
 once the application assets are loaded, but a brand-new page load with no network
 still requires those assets to be present in the browser cache. Full offline app

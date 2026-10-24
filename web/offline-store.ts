@@ -1,4 +1,4 @@
-import type { Operation } from "../src/crdt.ts";
+import { SequenceDocument, type Operation } from "../src/crdt.ts";
 
 export interface OfflineDocumentState {
   version: 1;
@@ -16,6 +16,25 @@ interface StoreOptions {
 }
 
 const STORE_NAME = "documents";
+
+function operationPayload(operation: Operation): string {
+  return operation.kind === "insert"
+    ? JSON.stringify({
+        kind: operation.kind,
+        id: operation.id,
+        actor: operation.actor,
+        counter: operation.counter,
+        after: operation.after,
+        value: operation.value,
+      })
+    : JSON.stringify({
+        kind: operation.kind,
+        id: operation.id,
+        actor: operation.actor,
+        counter: operation.counter,
+        target: operation.target,
+      });
+}
 
 function waitForRequest<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -35,7 +54,7 @@ function waitForTransaction(transaction: IDBTransaction): Promise<void> {
 function isOfflineDocumentState(value: unknown, documentId: string): value is OfflineDocumentState {
   if (!value || typeof value !== "object") return false;
   const state = value as Partial<OfflineDocumentState>;
-  return state.version === 1
+  const validEnvelope = state.version === 1
     && state.documentId === documentId
     && typeof state.actor === "string"
     && Number.isSafeInteger(state.cursor)
@@ -43,6 +62,27 @@ function isOfflineDocumentState(value: unknown, documentId: string): value is Of
     && Array.isArray(state.operations)
     && Array.isArray(state.pendingOperations)
     && typeof state.savedAt === "string";
+  if (!validEnvelope) return false;
+
+  try {
+    const operations = state.operations as Operation[];
+    const pendingOperations = state.pendingOperations as Operation[];
+    const restored = SequenceDocument.fromSnapshot(state.actor as string, { operations });
+    const canonical = restored.snapshot().operations;
+    if (canonical.length !== operations.length) return false;
+    const durablePayloads = new Map(
+      canonical.map((operation) => [operation.id, operationPayload(operation)]),
+    );
+    const pendingIds = new Set<string>();
+    for (const pending of pendingOperations) {
+      const payload = operationPayload(pending);
+      if (pendingIds.has(pending.id) || durablePayloads.get(pending.id) !== payload) return false;
+      pendingIds.add(pending.id);
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export class IndexedDbDocumentStore {
