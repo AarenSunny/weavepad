@@ -3,6 +3,9 @@
 The production server hosts the compiled React editor, WebSocket rooms, health
 endpoint, and SQLite operation log in one process. Browser clients therefore use
 the same origin for HTTP and WebSocket traffic with no CORS configuration.
+Unknown extensionless application routes receive the React shell, while missing
+paths under `/assets/` return `404` so a stale bundle request cannot be cached as
+the application shell.
 
 `GET /health` is the minimal process-liveness probe. `GET /ready` performs
 lightweight reads against the three required SQLite tables and returns `503`

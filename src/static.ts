@@ -49,7 +49,7 @@ export async function serveStatic(
     const metadata = await stat(file);
     if (!metadata.isFile()) throw new Error("not a file");
   } catch {
-    if (extname(requested)) return false;
+    if (requested.startsWith("assets/") || extname(requested)) return false;
     file = safePath(root, "index.html");
     if (!file) return false;
     try {

@@ -31,6 +31,11 @@ test("the production server serves the editor and immutable assets", async (cont
   const clientRoute = await fetch(`${origin}/document/demo`);
   assert.equal(clientRoute.status, 200);
   assert.match(await clientRoute.text(), /WeavePad/);
+
+  const missingAsset = await fetch(`${origin}/assets/missing-bundle`);
+  assert.equal(missingAsset.status, 404);
+  assert.equal(missingAsset.headers.get("cache-control"), null);
+  assert.equal(await missingAsset.text(), "");
 });
 
 test("static serving cannot escape its configured directory", async (context) => {
