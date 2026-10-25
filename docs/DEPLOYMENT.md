@@ -63,7 +63,12 @@ presence fan-out.
 
 ## Graceful shutdown and backups
 
-`SIGTERM` and `SIGINT` stop accepting connections, close WebSockets, and close
-SQLite before the process exits. For backups, stop the container or use SQLite's
-online backup facilities; copying only the main database file while WAL writes
-are active can produce an inconsistent backup.
+`SIGTERM` and `SIGINT` stop accepting connections, ask WebSocket clients to
+close, and close SQLite before the process exits. A client that does not complete
+the close handshake is terminated after a five-second grace period, preventing
+shutdown from hanging indefinitely. The programmatic server option can shorten
+that bounded drain for tests but caps it at 60 seconds.
+
+For backups, stop the container or use SQLite's online backup facilities;
+copying only the main database file while WAL writes are active can produce an
+inconsistent backup.

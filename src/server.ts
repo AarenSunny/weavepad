@@ -46,6 +46,7 @@ export interface SyncServerOptions {
   databasePath?: string;
   presenceTtlMs?: number;
   presenceSweepIntervalMs?: number;
+  shutdownGraceMs?: number;
   staticDirectory?: string | false;
 }
 
@@ -74,6 +75,10 @@ function wireBatch(type: "sync" | "operations", batch: SyncBatch): object {
 
 export async function startSyncServer(options: SyncServerOptions = {}): Promise<SyncServer> {
   const host = options.host ?? "127.0.0.1";
+  const shutdownGraceMs = options.shutdownGraceMs ?? 5_000;
+  if (!Number.isSafeInteger(shutdownGraceMs) || shutdownGraceMs < 0 || shutdownGraceMs > 60_000) {
+    throw new Error("shutdown grace must be an integer between 0 and 60000ms");
+  }
   const store = new SqliteOperationStore(options.databasePath ?? "weavepad.db");
   const staticDirectory = options.staticDirectory === undefined ? "dist" : options.staticDirectory;
   const hub = new CollaborationHub(store);
@@ -88,6 +93,8 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
     operationsPersisted: 0,
   };
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: 1_048_576 });
+  let closing = false;
+  let closePromise: Promise<void> | undefined;
   const http = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/health") {
       response.writeHead(200, {
@@ -129,6 +136,11 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
   });
 
   http.on("upgrade", (request, socket, head) => {
+    if (closing) {
+      socket.write("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
     try {
       const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
       const match = /^\/documents\/([^/]+)$/.exec(url.pathname);
@@ -231,13 +243,30 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
     hub,
     presence,
     port: address.port,
-    async close() {
+    close() {
+      if (closePromise) return closePromise;
+      closing = true;
       clearInterval(sweepTimer);
-      for (const socket of sockets) socket.close(1001, "server shutdown");
-      await new Promise<void>((resolve, reject) => {
-        webSockets.close(() => http.close((error) => error ? reject(error) : resolve()));
-      });
-      store.close();
+      closePromise = (async () => {
+        const httpClosed = new Promise<void>((resolve, reject) => {
+          http.close((error) => error ? reject(error) : resolve());
+        });
+        const webSocketsClosed = new Promise<void>((resolve, reject) => {
+          webSockets.close((error) => error ? reject(error) : resolve());
+        });
+        for (const socket of sockets) socket.close(1001, "server shutdown");
+        const forceTimer = setTimeout(() => {
+          for (const socket of sockets) socket.terminate();
+        }, shutdownGraceMs);
+        forceTimer.unref();
+        try {
+          await Promise.all([httpClosed, webSocketsClosed]);
+        } finally {
+          clearTimeout(forceTimer);
+          store.close();
+        }
+      })();
+      return closePromise;
     },
   };
 }

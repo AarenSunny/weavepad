@@ -252,3 +252,25 @@ test("malformed presence JSON is rejected without contaminating the room", async
   assert.equal(recovered.type, "presence");
   assert.equal(recovered.participants[0].userId, "alice");
 });
+
+test("shutdown force-closes an unresponsive WebSocket after its grace period", async () => {
+  const server = await startSyncServer({
+    port: 0,
+    databasePath: ":memory:",
+    shutdownGraceMs: 20,
+  });
+  const client = await connect(server, "shutdown-test");
+  const transport = (client.socket as unknown as {
+    _socket: { pause(): void; resume(): void };
+  })._socket;
+  transport.pause();
+
+  const startedAt = Date.now();
+  await server.close();
+  const elapsedMs = Date.now() - startedAt;
+  transport.resume();
+  if (client.socket.readyState !== WebSocket.CLOSED) await once(client.socket, "close");
+
+  assert.ok(elapsedMs >= 15, `shutdown ignored its grace period: ${elapsedMs}ms`);
+  assert.ok(elapsedMs < 500, `shutdown exceeded its bounded grace period: ${elapsedMs}ms`);
+});
