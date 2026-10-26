@@ -181,7 +181,8 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
         if (isBinary) throw new Error("binary messages are not supported");
         const message = JSON.parse(data.toString()) as ClientMessage;
         if (message?.type === "sync") {
-          send(socket, wireBatch("sync", hub.sync(documentId, message.after ?? 0)));
+          const after = message.after === undefined ? 0 : message.after;
+          send(socket, wireBatch("sync", hub.sync(documentId, after)));
         } else if (message?.type === "operations") {
           if (!Array.isArray(message.operations)) throw new Error("operations must be an array");
           if (message.operations.length > MAX_OPERATIONS_PER_MESSAGE) {

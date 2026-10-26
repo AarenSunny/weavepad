@@ -52,6 +52,11 @@ actor's operation 12 does not prove that operation 11 was received. Sequence
 queries make missed broadcasts recoverable even when client delivery is
 interrupted or reordered.
 
+Omitting `after` requests the document from cursor zero. If the field is
+present, it must be a non-negative safe integer; explicit `null`, strings,
+fractions, negative values, and unsafe integers receive a protocol error rather
+than silently restarting a potentially large replay.
+
 After server-side compaction, a client whose cursor predates the retained
 checkpoint receives an additional checkpoint before the remaining operation
 rows:

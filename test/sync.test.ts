@@ -200,6 +200,8 @@ test("protocol errors are isolated to the offending message", async (context) =>
     }],
   }));
   assert.match((await client.inbox.next()).message, /one grapheme/);
+  client.socket.send(JSON.stringify({ type: "sync", after: null }));
+  assert.match((await client.inbox.next()).message, /sync cursor/);
   client.socket.send(JSON.stringify({ type: "sync", after: 0 }));
   const recovered = await client.inbox.next();
   assert.equal(recovered.type, "sync");
