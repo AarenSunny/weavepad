@@ -79,10 +79,16 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
   if (!Number.isSafeInteger(shutdownGraceMs) || shutdownGraceMs < 0 || shutdownGraceMs > 60_000) {
     throw new Error("shutdown grace must be an integer between 0 and 60000ms");
   }
+  const presence = new PresenceManager({ ttlMs: options.presenceTtlMs });
+  const presenceSweepIntervalMs = options.presenceSweepIntervalMs ??
+    Math.min(5_000, Math.floor(presence.ttlMs / 2));
+  if (!Number.isSafeInteger(presenceSweepIntervalMs) || presenceSweepIntervalMs < 1 ||
+      presenceSweepIntervalMs > 2_147_483_647) {
+    throw new Error("presence sweep interval must be an integer between 1 and 2147483647ms");
+  }
   const store = new SqliteOperationStore(options.databasePath ?? "weavepad.db");
   const staticDirectory = options.staticDirectory === undefined ? "dist" : options.staticDirectory;
   const hub = new CollaborationHub(store);
-  const presence = new PresenceManager({ ttlMs: options.presenceTtlMs });
   const sockets = new Set<WebSocket>();
   const metrics: RuntimeMetrics = {
     startedAt: Date.now(),
@@ -224,7 +230,7 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
 
   const sweepTimer = setInterval(
     () => presence.sweepExpired(),
-    options.presenceSweepIntervalMs ?? Math.min(5_000, Math.floor(presence.ttlMs / 2)),
+    presenceSweepIntervalMs,
   );
   sweepTimer.unref();
 

@@ -36,6 +36,9 @@ Clients send `{"type":"heartbeat"}` while connected. Heartbeats update liveness
 without broadcasting a new roster, avoiding network noise. The default TTL is 30
 seconds, checked every five seconds. Clean WebSocket disconnects remove a session
 immediately; the TTL handles crashed processes and broken network paths.
+Programmatic TTL and sweep overrides are validated before SQLite is opened, so
+an invalid interval cannot create a one-millisecond busy sweep or leave a
+database handle behind during failed startup.
 
 Presence never enters SQLite or the CRDT operation log. After a server restart,
 clients reconnect and announce themselves again.

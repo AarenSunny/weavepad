@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -47,6 +48,26 @@ async function closeSocket(socket: WebSocket): Promise<void> {
   socket.close();
   await once(socket, "close");
 }
+
+test("invalid presence timers fail before opening SQLite", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "weavepad-invalid-presence-"));
+  const databasePath = join(directory, "documents.db");
+  try {
+    await assert.rejects(
+      startSyncServer({ port: 0, databasePath, presenceTtlMs: 999 }),
+      /presence TTL must be an integer of at least 1000ms/,
+    );
+    assert.equal(existsSync(databasePath), false);
+
+    await assert.rejects(
+      startSyncServer({ port: 0, databasePath, presenceSweepIntervalMs: 0 }),
+      /presence sweep interval must be an integer between 1 and 2147483647ms/,
+    );
+    assert.equal(existsSync(databasePath), false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("two WebSocket clients receive the same accepted operation batch", async (context) => {
   const server = await startSyncServer({ port: 0, databasePath: ":memory:" });
