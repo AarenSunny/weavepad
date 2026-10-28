@@ -48,8 +48,12 @@ npm run compaction-experiment -- --batches 1000 --retain 50 --samples 25
 
 The experiment creates an isolated temporary SQLite database, measures
 cursor-zero materialization before and after compaction, validates exact text
-and logical-operation counts, and removes the database on exit. Inputs are
-capped at 2,000 batches, 100 retained revisions, and 100 timing samples.
+and logical-operation counts, and removes the database on exit. Its JSON report
+includes the Node.js version, operating system release, architecture, available
+parallelism, and CPU model so local timing evidence retains its runtime context.
+Inputs are capped at 2,000 batches, 100 retained revisions, and 100 timing
+samples. The metadata makes comparisons auditable; it does not make results
+portable across otherwise similar machines.
 
 ### Verified development run — 2026-10-06
 

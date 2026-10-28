@@ -7,6 +7,10 @@ import { pathToFileURL } from "node:url";
 import { SequenceDocument } from "../src/crdt.ts";
 import { CollaborationHub, type SyncBatch } from "../src/sync.ts";
 import { SqliteOperationStore } from "../src/store.ts";
+import {
+  captureExperimentEnvironment,
+  type ExperimentEnvironment,
+} from "./experiment-environment.ts";
 
 export interface CompactionExperimentOptions {
   batches: number;
@@ -15,6 +19,7 @@ export interface CompactionExperimentOptions {
 }
 
 export interface CompactionExperimentReport {
+  environment: ExperimentEnvironment;
   batches: number;
   retainedRevisions: number;
   checkpointSequence: number;
@@ -82,6 +87,7 @@ export async function runCompactionExperiment(
   options: CompactionExperimentOptions = DEFAULT_COMPACTION_OPTIONS,
 ): Promise<CompactionExperimentReport> {
   validateOptions(options);
+  const environment = captureExperimentEnvironment();
   const directory = await mkdtemp(join(tmpdir(), "weavepad-compaction-"));
   const store = new SqliteOperationStore(join(directory, "documents.db"));
   const hub = new CollaborationHub(store);
@@ -103,6 +109,7 @@ export async function runCompactionExperiment(
     }
 
     return {
+      environment,
       batches: options.batches,
       retainedRevisions: options.retainedRevisions,
       checkpointSequence: compaction.checkpointSequence,
