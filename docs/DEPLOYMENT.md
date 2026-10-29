@@ -14,11 +14,11 @@ disable HTTP caching so an intermediary cannot reuse stale health state.
 and returns `503` when durable collaboration state is unavailable. Use it as the
 traffic readiness gate. `GET /metrics` returns uncached, process-local JSON counters for
 active and total WebSocket connections, transport errors, received and rejected
-messages, persisted operations, and uptime. The endpoint contains no document
-IDs, user identities, or payloads. It is intentionally a single-process
-diagnostic rather than durable telemetry; production deployments should restrict
-it at the reverse proxy as appropriate and export centralized metrics, traces,
-and alerts separately.
+messages, backpressure disconnects, persisted operations, and uptime. The
+endpoint contains no document IDs, user identities, or payloads. It is
+intentionally a single-process diagnostic rather than durable telemetry;
+production deployments should restrict it at the reverse proxy as appropriate
+and export centralized metrics, traces, and alerts separately.
 
 ## Docker Compose
 
@@ -50,12 +50,17 @@ Environment variables:
 | `PORT` | `3000` | Service port |
 | `WEAVEPAD_DB` | `weavepad.db` | SQLite database path |
 | `WEAVEPAD_STATIC` | `dist` | Compiled editor directory |
+| `WEAVEPAD_MAX_BUFFERED_BYTES` | `8388608` | Per-connection outbound byte ceiling |
 
 ## Reverse proxy
 
 The proxy must pass WebSocket upgrades for `/documents/*` and should use a
 request timeout longer than the expected editing session. Terminate TLS at the
 proxy; the browser automatically selects `wss:` when the page uses HTTPS.
+The application terminates a client before one serialized message plus its
+already queued sends would exceed `WEAVEPAD_MAX_BUFFERED_BYTES`. This isolates
+slow consumers but does not cap total connections or aggregate process memory;
+enforce those limits and request rates at the proxy or orchestrator.
 
 Only one WeavePad process should write a given SQLite database. Horizontal
 scaling requires the planned PostgreSQL operation-store adapter plus shared

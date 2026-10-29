@@ -47,6 +47,7 @@ export interface SyncServerOptions {
   presenceTtlMs?: number;
   presenceSweepIntervalMs?: number;
   shutdownGraceMs?: number;
+  maxBufferedBytes?: number;
   staticDirectory?: string | false;
 }
 
@@ -54,13 +55,38 @@ interface RuntimeMetrics {
   startedAt: number;
   totalConnections: number;
   transportErrors: number;
+  backpressureDisconnects: number;
   messagesReceived: number;
   rejectedMessages: number;
   operationsPersisted: number;
 }
 
-function send(socket: WebSocket, payload: unknown): void {
-  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+interface OutboundSocket {
+  readonly readyState: number;
+  readonly bufferedAmount: number;
+  send(data: string): void;
+  terminate(): void;
+}
+
+export type SendResult = "sent" | "unavailable" | "backpressure";
+
+export function sendWithBufferLimit(
+  socket: OutboundSocket,
+  payload: object,
+  maxBufferedBytes: number,
+): SendResult {
+  if (socket.readyState !== WebSocket.OPEN) return "unavailable";
+  if (!Number.isSafeInteger(maxBufferedBytes) || maxBufferedBytes < 1) {
+    throw new Error("outbound buffer limit must be a positive safe integer");
+  }
+  const message = JSON.stringify(payload);
+  const messageBytes = Buffer.byteLength(message);
+  if (messageBytes > maxBufferedBytes || socket.bufferedAmount > maxBufferedBytes - messageBytes) {
+    socket.terminate();
+    return "backpressure";
+  }
+  socket.send(message);
+  return "sent";
 }
 
 function wireBatch(type: "sync" | "operations", batch: SyncBatch): object {
@@ -79,6 +105,11 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
   if (!Number.isSafeInteger(shutdownGraceMs) || shutdownGraceMs < 0 || shutdownGraceMs > 60_000) {
     throw new Error("shutdown grace must be an integer between 0 and 60000ms");
   }
+  const maxBufferedBytes = options.maxBufferedBytes ?? 8_388_608;
+  if (!Number.isSafeInteger(maxBufferedBytes) || maxBufferedBytes < 1_024 ||
+      maxBufferedBytes > 67_108_864) {
+    throw new Error("outbound buffer limit must be an integer between 1024 and 67108864 bytes");
+  }
   const presence = new PresenceManager({ ttlMs: options.presenceTtlMs });
   const presenceSweepIntervalMs = options.presenceSweepIntervalMs ??
     Math.min(5_000, Math.floor(presence.ttlMs / 2));
@@ -94,9 +125,15 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
     startedAt: Date.now(),
     totalConnections: 0,
     transportErrors: 0,
+    backpressureDisconnects: 0,
     messagesReceived: 0,
     rejectedMessages: 0,
     operationsPersisted: 0,
+  };
+  const send = (socket: WebSocket, payload: object): void => {
+    if (sendWithBufferLimit(socket, payload, maxBufferedBytes) === "backpressure") {
+      metrics.backpressureDisconnects += 1;
+    }
   };
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: 1_048_576 });
   let closing = false;
@@ -130,6 +167,7 @@ export async function startSyncServer(options: SyncServerOptions = {}): Promise<
         activeConnections: sockets.size,
         totalConnections: metrics.totalConnections,
         transportErrors: metrics.transportErrors,
+        backpressureDisconnects: metrics.backpressureDisconnects,
         messagesReceived: metrics.messagesReceived,
         rejectedMessages: metrics.rejectedMessages,
         operationsPersisted: metrics.operationsPersisted,
@@ -284,6 +322,9 @@ if (import.meta.url === entrypoint) {
     host: process.env.HOST,
     port: process.env.PORT ? Number(process.env.PORT) : undefined,
     databasePath: process.env.WEAVEPAD_DB,
+    maxBufferedBytes: process.env.WEAVEPAD_MAX_BUFFERED_BYTES
+      ? Number(process.env.WEAVEPAD_MAX_BUFFERED_BYTES)
+      : undefined,
     staticDirectory: process.env.WEAVEPAD_STATIC ?? "dist",
   });
   console.log(`WeavePad listening on http://${process.env.HOST ?? "127.0.0.1"}:${server.port}`);

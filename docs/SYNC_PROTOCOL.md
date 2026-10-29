@@ -109,9 +109,12 @@ long offline session does not create an immediately rejected reconnect message.
 Malformed messages and operation batches over the batch cap receive a structured
 `error` response without terminating the room. A frame over the 1 MiB transport
 cap closes only the offending connection and increments the transport-error
-metric; the process and other rooms remain available. These bounds are not
-per-client rate limiting, admission control, or backpressure; those remain
-deployment concerns for an internet-facing service.
+metric; the process and other rooms remain available. Outbound sends also cap
+each connection's queued bytes at 8 MiB by default. A message that would cross
+the configured ceiling terminates only that slow connection and increments the
+backpressure-disconnect metric; reconnect catch-up recovers from the durable
+cursor. These bounds are not per-client rate limiting or admission control;
+those remain deployment concerns for an internet-facing service.
 
 ## Durability boundary
 

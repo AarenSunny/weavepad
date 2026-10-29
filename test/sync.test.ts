@@ -49,8 +49,8 @@ async function closeSocket(socket: WebSocket): Promise<void> {
   await once(socket, "close");
 }
 
-test("invalid presence timers fail before opening SQLite", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "weavepad-invalid-presence-"));
+test("invalid runtime limits fail before opening SQLite", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "weavepad-invalid-runtime-"));
   const databasePath = join(directory, "documents.db");
   try {
     await assert.rejects(
@@ -62,6 +62,12 @@ test("invalid presence timers fail before opening SQLite", async () => {
     await assert.rejects(
       startSyncServer({ port: 0, databasePath, presenceSweepIntervalMs: 0 }),
       /presence sweep interval must be an integer between 1 and 2147483647ms/,
+    );
+    assert.equal(existsSync(databasePath), false);
+
+    await assert.rejects(
+      startSyncServer({ port: 0, databasePath, maxBufferedBytes: 1_023 }),
+      /outbound buffer limit must be an integer between 1024 and 67108864 bytes/,
     );
     assert.equal(existsSync(databasePath), false);
   } finally {

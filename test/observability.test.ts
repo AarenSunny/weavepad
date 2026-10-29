@@ -16,6 +16,7 @@ interface RuntimeMetrics {
   activeConnections: number;
   totalConnections: number;
   transportErrors: number;
+  backpressureDisconnects: number;
   messagesReceived: number;
   rejectedMessages: number;
   operationsPersisted: number;
@@ -63,6 +64,7 @@ test("runtime metrics expose aggregate connection and protocol health", async (c
   assert.equal(initial.activeConnections, 0);
   assert.equal(initial.totalConnections, 0);
   assert.equal(initial.transportErrors, 0);
+  assert.equal(initial.backpressureDisconnects, 0);
   assert.equal(initial.messagesReceived, 0);
   assert.equal(initial.rejectedMessages, 0);
   assert.equal(initial.operationsPersisted, 0);
@@ -127,4 +129,34 @@ test("oversized WebSocket frames are isolated and counted", async (context) => {
 
   const health = await fetch(`${origin}/health`);
   assert.equal(health.status, 200);
+});
+
+test("slow consumers are isolated and counted before an oversized sync is queued", async (context) => {
+  const server = await startSyncServer({
+    port: 0,
+    databasePath: ":memory:",
+    staticDirectory: false,
+    maxBufferedBytes: 1_024,
+  });
+  context.after(() => server.close());
+  const origin = `http://127.0.0.1:${server.port}`;
+  const document = new SequenceDocument("buffer-author");
+  server.hub.submit("buffer-limit", document.localInsert(0, "x".repeat(100)));
+
+  const socket = new WebSocket(`ws://127.0.0.1:${server.port}/documents/buffer-limit`);
+  const readyMessage = once(socket, "message");
+  await once(socket, "open");
+  await readyMessage;
+  const closedEvent = once(socket, "close");
+  socket.send(JSON.stringify({ type: "sync", after: 0 }));
+  await closedEvent;
+
+  let metrics = await fetch(`${origin}/metrics`).then((response) => response.json()) as RuntimeMetrics;
+  for (let attempt = 0; attempt < 20 && metrics.activeConnections !== 0; attempt += 1) {
+    await delay(5);
+    metrics = await fetch(`${origin}/metrics`).then((response) => response.json()) as RuntimeMetrics;
+  }
+  assert.equal(metrics.activeConnections, 0);
+  assert.equal(metrics.backpressureDisconnects, 1);
+  assert.equal(metrics.transportErrors, 0);
 });
