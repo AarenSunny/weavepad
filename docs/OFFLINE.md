@@ -23,6 +23,9 @@ because both the CRDT and server store are idempotent.
 Operation broadcasts, catch-up responses, and durable replay acknowledgements
 all advance the saved cursor monotonically; malformed, fractional, negative, or
 unsafe cursor values are rejected instead of poisoning IndexedDB recovery state.
+Checkpoint and operation batches are validated and applied to a cloned CRDT
+replica first, so one malformed operation cannot leave a partial merge in the
+live editor state.
 
 This order avoids two common recovery bugs: overwriting local offline edits with
 a server snapshot, and generating new operations under a different replica ID

@@ -4,20 +4,11 @@ import type { PresenceParticipant, PresenceSelection } from "../src/presence.ts"
 import { avatarTextColor } from "./color-contrast.ts";
 import { applyTextChange, cursorAnchor } from "./editor-state.ts";
 import { loadIdentity, saveIdentity } from "./identity.ts";
+import { applyInboundBatch } from "./inbound-sync.ts";
 import { IndexedDbDocumentStore } from "./offline-store.ts";
 import { operationBatches, removeAcknowledgedOperations } from "./operation-batches.ts";
 import { advanceSyncCursor } from "./sync-cursor.ts";
 import { recentTimeLabel, reconnectDelayMs, syncProgressLabel, type ConnectionStatus } from "./sync-health.ts";
-
-interface StoredWireOperation {
-  sequence: number;
-  operation: Operation;
-}
-
-interface WireCheckpoint {
-  sequence: number;
-  operations: Operation[];
-}
 
 interface DocumentRevision {
   revision: number;
@@ -179,26 +170,15 @@ export function App() {
           } else if (message.type === "presence") {
             setParticipants(message.participants as PresenceParticipant[]);
           } else if (message.type === "sync" || message.type === "operations") {
-            if (!Array.isArray(message.operations)) {
-              throw new Error("The sync service sent an invalid operation batch.");
-            }
-            const entries = message.operations as StoredWireOperation[];
-            const checkpoint = message.checkpoint as WireCheckpoint | undefined;
-            let nextCursor = advanceSyncCursor(cursorRef.current, message.cursor);
-            if (checkpoint) nextCursor = advanceSyncCursor(nextCursor, checkpoint.sequence);
-            for (const entry of entries) nextCursor = advanceSyncCursor(nextCursor, entry.sequence);
-            if (checkpoint) {
-              documentRef.current.merge(checkpoint.operations);
-            }
-            for (const entry of entries) {
-              documentRef.current.apply(entry.operation);
-            }
-            cursorRef.current = nextCursor;
-            const accepted = [
-              ...(checkpoint?.operations.map((operation) => operation.id) ?? []),
-              ...entries.map((entry) => entry.operation.id),
-            ];
-            pendingRef.current = removeAcknowledgedOperations(pendingRef.current, accepted);
+            const applied = applyInboundBatch(
+              documentRef.current,
+              cursorRef.current,
+              pendingRef.current,
+              message,
+            );
+            documentRef.current = applied.document;
+            cursorRef.current = applied.cursor;
+            pendingRef.current = applied.pendingOperations;
             setPendingCount(pendingRef.current.length);
             const materialized = documentRef.current.toString();
             textRef.current = materialized;
