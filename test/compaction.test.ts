@@ -137,6 +137,23 @@ test("checkpoint loading rejects corrupt persisted metadata", async (context) =>
   assert.throws(() => invalidJson.checkpoint("notes"), /corrupt checkpoint snapshot JSON/);
   invalidJson.close();
 
+  const invalidOperationsDatabase = new DatabaseSync(databasePath);
+  const invalidOperations = JSON.parse(valid.snapshot) as {
+    operations: Array<Record<string, unknown>>;
+  };
+  invalidOperations.operations[0] = { ...invalidOperations.operations[0], value: "too long" };
+  invalidOperationsDatabase.prepare(`
+    UPDATE document_checkpoints SET snapshot = ?, operation_count = ?
+    WHERE document_id = ?
+  `).run(JSON.stringify(invalidOperations), valid.operationCount, "notes");
+  invalidOperationsDatabase.close();
+  const invalidOperationSet = new SqliteOperationStore(databasePath);
+  assert.throws(
+    () => invalidOperationSet.checkpoint("notes"),
+    /corrupt checkpoint operation set/,
+  );
+  invalidOperationSet.close();
+
   const invalidSequenceDatabase = new DatabaseSync(databasePath);
   invalidSequenceDatabase.prepare(`
     UPDATE document_checkpoints SET sequence = 0, snapshot = ?, operation_count = ?

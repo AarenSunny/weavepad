@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import type { DocumentSnapshot, Operation } from "./crdt.ts";
+import { SequenceDocument, type DocumentSnapshot, type Operation } from "./crdt.ts";
 
 export interface StoredOperation {
   sequence: number;
@@ -57,6 +57,11 @@ function checkpointSnapshot(payload: string, operationCount: number): DocumentSn
   const operations = (snapshot as DocumentSnapshot).operations;
   if (operations.length !== operationCount) {
     throw new Error("corrupt checkpoint operation count");
+  }
+  try {
+    SequenceDocument.fromSnapshot("checkpoint", { operations });
+  } catch {
+    throw new Error("corrupt checkpoint operation set");
   }
   return { operations };
 }
