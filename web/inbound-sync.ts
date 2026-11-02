@@ -38,13 +38,35 @@ export function applyInboundBatch(
     checkpoint = message.checkpoint as unknown as WireCheckpoint;
   }
 
-  let cursor = advanceSyncCursor(currentCursor, message.cursor);
-  if (checkpoint) cursor = advanceSyncCursor(cursor, checkpoint.sequence);
+  const batchCursor = advanceSyncCursor(0, message.cursor);
+  let cursor = advanceSyncCursor(currentCursor, batchCursor);
+  let checkpointSequence: number | undefined;
+  if (checkpoint) {
+    checkpointSequence = advanceSyncCursor(0, checkpoint.sequence);
+    if (checkpointSequence > batchCursor) {
+      throw new Error("The sync service sent a checkpoint beyond the batch cursor.");
+    }
+    cursor = advanceSyncCursor(cursor, checkpointSequence);
+  }
+
+  let previousSequence: number | undefined;
   for (const entry of entries) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       throw new Error("The sync service sent an invalid stored operation.");
     }
-    cursor = advanceSyncCursor(cursor, entry.sequence);
+    const sequence = advanceSyncCursor(0, entry.sequence);
+    if (checkpointSequence !== undefined && sequence <= checkpointSequence) {
+      throw new Error("The sync service sent an operation at or before its checkpoint.");
+    }
+    if (previousSequence !== undefined && sequence <= previousSequence) {
+      throw new Error("The sync service sent operations outside strict sequence order.");
+    }
+    previousSequence = sequence;
+    cursor = advanceSyncCursor(cursor, sequence);
+  }
+  const finalSequence = previousSequence ?? checkpointSequence;
+  if (finalSequence !== undefined && finalSequence !== batchCursor) {
+    throw new Error("The sync service cursor does not match its final stored sequence.");
   }
 
   const candidate = SequenceDocument.fromSnapshot(document.actor, document.snapshot());

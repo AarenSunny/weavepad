@@ -25,7 +25,10 @@ all advance the saved cursor monotonically; malformed, fractional, negative, or
 unsafe cursor values are rejected instead of poisoning IndexedDB recovery state.
 Checkpoint and operation batches are validated and applied to a cloned CRDT
 replica first, so one malformed operation cannot leave a partial merge in the
-live editor state.
+live editor state. Post-checkpoint operation sequences must increase strictly,
+and the final stored sequence must equal the batch cursor. Gaps remain valid
+because SQLite sequences are shared by all documents. An inconsistent envelope
+cannot advance the durable cursor or clear pending operations.
 
 This order avoids two common recovery bugs: overwriting local offline edits with
 a server snapshot, and generating new operations under a different replica ID
