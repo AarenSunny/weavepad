@@ -87,10 +87,11 @@ Clients send up to 1,000 operations in a batch:
 The hub validates the entire batch against a copy of the current CRDT, writes new
 operations in one SQLite transaction, and only then broadcasts an `operations`
 message to every connected client. Identical replays are no-ops; an identifier
-reused with another payload is rejected. If a submitted operation was already
-durable, the server returns an `ack` containing that operation ID. This lets a
-client clear replayed pending work even though a no-op does not create a second
-broadcast or revision.
+reused with another payload is rejected. Insert-anchor cycles are also rejected
+before any operation in that batch reaches SQLite or the live room. If a
+submitted operation was already durable, the server returns an `ack` containing
+that operation ID. This lets a client clear replayed pending work even though a
+no-op does not create a second broadcast or revision.
 
 ```json
 {"type":"ack","documentId":"demo","cursor":45,"operationIds":["alice:12"]}

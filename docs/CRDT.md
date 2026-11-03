@@ -39,6 +39,9 @@ Operations may arrive in any order:
   reachable when its ancestor arrives.
 - A delete whose target is not present is retained in `pendingDeletes`; the
   matching insert is immediately tombstoned when it arrives.
+- Insert-anchor cycles are rejected when their closing edge arrives, before the
+  replica mutates. Non-cyclic missing anchors remain valid for out-of-order
+  delivery and may stay unreachable until their ancestor arrives.
 - Replaying an identical operation has no effect.
 - Reusing an identifier with a different payload is rejected as corruption.
 

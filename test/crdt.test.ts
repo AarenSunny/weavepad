@@ -50,6 +50,22 @@ test("duplicate delivery is idempotent and conflicting IDs are rejected", () => 
   assert.throws(() => receiver.apply({ ...operation, value: "B" }), /conflicting operation/);
 });
 
+test("cyclic insert anchors are rejected without mutating the replica", () => {
+  const document = new SequenceDocument("alice");
+  assert.throws(() => document.apply({
+    kind: "insert", id: "alice:99", actor: "alice", counter: 99,
+    after: "alice:99", value: "X",
+  }), /anchors must not form a cycle/);
+  const [local] = document.localInsert(0, "A");
+  assert.equal(local.id, "alice:1");
+  assert.equal(document.toString(), "A");
+
+  assert.throws(() => SequenceDocument.fromSnapshot("reader", { operations: [
+    { kind: "insert", id: "one:1", actor: "one", counter: 1, after: "two:1", value: "1" },
+    { kind: "insert", id: "two:1", actor: "two", counter: 1, after: "one:1", value: "2" },
+  ] }), /anchors must not form a cycle/);
+});
+
 test("three replicas converge after shuffled offline edits", () => {
   const alice = new SequenceDocument("alice");
   const initial = alice.localInsert(0, "notes");

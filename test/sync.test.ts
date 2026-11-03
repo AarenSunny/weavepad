@@ -206,12 +206,21 @@ test("protocol errors are isolated to the offending message", async (context) =>
     }],
   }));
   assert.match((await client.inbox.next()).message, /one grapheme/);
+  client.socket.send(JSON.stringify({
+    type: "operations",
+    operations: [
+      { kind: "insert", id: "one:1", actor: "one", counter: 1, after: "two:1", value: "1" },
+      { kind: "insert", id: "two:1", actor: "two", counter: 1, after: "one:1", value: "2" },
+    ],
+  }));
+  assert.match((await client.inbox.next()).message, /anchors must not form a cycle/);
   client.socket.send(JSON.stringify({ type: "sync", after: null }));
   assert.match((await client.inbox.next()).message, /sync cursor/);
   client.socket.send(JSON.stringify({ type: "sync", after: 0 }));
   const recovered = await client.inbox.next();
   assert.equal(recovered.type, "sync");
   assert.deepEqual(recovered.operations, []);
+  assert.equal(server.hub.text("demo"), "");
 });
 
 test("oversized operation batches are rejected without closing the room", async (context) => {

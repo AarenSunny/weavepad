@@ -69,6 +69,7 @@ export class SequenceDocument {
   private readonly nodes = new Map<string, CharacterNode>();
   private readonly pendingDeletes = new Set<string>();
   private readonly operations = new Map<string, Operation>();
+  private readonly anchorComponents = new Map<string, string>();
 
   constructor(actor: string) {
     if (!ACTOR_PATTERN.test(actor)) {
@@ -143,7 +144,6 @@ export class SequenceDocument {
 
   apply(operation: Operation): boolean {
     this.validate(operation);
-    this.counter = Math.max(this.counter, operation.counter);
     const existing = this.operations.get(operation.id);
     if (existing) {
       if (JSON.stringify(existing) !== JSON.stringify(operation)) {
@@ -151,6 +151,8 @@ export class SequenceDocument {
       }
       return false;
     }
+    if (operation.kind === "insert") this.acceptInsertAnchor(operation);
+    this.counter = Math.max(this.counter, operation.counter);
 
     this.operations.set(operation.id, cloneOperation(operation));
     if (operation.kind === "insert") {
@@ -228,6 +230,27 @@ export class SequenceDocument {
       if (typeof operation.target !== "string") throw new Error("invalid delete operation target");
       parseId(operation.target);
     }
+  }
+
+  private acceptInsertAnchor(operation: InsertOperation): void {
+    const operationRoot = this.anchorComponent(operation.id);
+    const anchorRoot = this.anchorComponent(operation.after);
+    if (operationRoot === anchorRoot) {
+      throw new Error("insert operation anchors must not form a cycle");
+    }
+    this.anchorComponents.set(operationRoot, anchorRoot);
+  }
+
+  private anchorComponent(id: string): string {
+    let root = id;
+    while (this.anchorComponents.has(root)) root = this.anchorComponents.get(root)!;
+    let current = id;
+    while (current !== root) {
+      const parent = this.anchorComponents.get(current)!;
+      this.anchorComponents.set(current, root);
+      current = parent;
+    }
+    return root;
   }
 
   private visibleNodes(): CharacterNode[] {
