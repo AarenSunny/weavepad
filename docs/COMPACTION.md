@@ -36,10 +36,11 @@ document, durable cursor monotonicity, or operation identifiers.
 Checkpoint reads fail closed when the stored sequence or operation count is
 invalid, the JSON envelope is malformed, the declared operation count does not
 match the snapshot, or the snapshot contains an invalid or conflicting CRDT
-operation. The operation set is rebuilt in a scratch replica before it can
-reach reconnect or restart recovery. These application-level checks do not
-replace SQLite integrity checks, storage checksums, or tested backup
-restoration.
+operation. Before compaction writes a replacement checkpoint, it also rebuilds
+the complete candidate snapshot in a scratch replica. A semantically corrupt
+operation row therefore cannot be sealed into a checkpoint and have its source
+row deleted. These application-level checks do not replace SQLite integrity
+checks, storage checksums, or tested backup restoration.
 
 ## Bounded experiment
 

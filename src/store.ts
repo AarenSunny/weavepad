@@ -124,12 +124,18 @@ export class SqliteOperationStore {
       WHERE document_id = ? AND sequence > ? AND sequence <= ?
       ORDER BY sequence ASC
     `).all(documentId, checkpoint?.sequence ?? 0, throughSequence) as Array<{ sequence: number; payload: string }>;
-    return {
+    const snapshot = {
       operations: [
         ...(checkpoint?.snapshot.operations ?? []),
         ...rows.map((row) => JSON.parse(row.payload) as Operation),
       ],
     };
+    try {
+      SequenceDocument.fromSnapshot("stored-operations", snapshot);
+    } catch {
+      throw new Error("corrupt stored operation set");
+    }
+    return snapshot;
   }
 
   history(documentId: string, limit = 50): DocumentRevision[] {
