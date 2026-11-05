@@ -39,7 +39,9 @@ match the snapshot, or the snapshot contains an invalid or conflicting CRDT
 operation. Before compaction writes a replacement checkpoint, it also rebuilds
 the complete candidate snapshot in a scratch replica. A semantically corrupt
 operation row therefore cannot be sealed into a checkpoint and have its source
-row deleted. These application-level checks do not replace SQLite integrity
+row deleted. Retained revision metadata is also decoded and checked for a live
+operation or checkpoint boundary before it can select the replacement
+checkpoint. These application-level checks do not replace SQLite integrity
 checks, storage checksums, or tested backup restoration.
 
 ## Bounded experiment

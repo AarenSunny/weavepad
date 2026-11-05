@@ -42,6 +42,45 @@ export interface CompactionReport {
 }
 
 const DOCUMENT_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const ACTOR_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+interface RevisionRow {
+  revision: number;
+  sequence: number;
+  operation_count: number;
+  actors: string;
+  created_at: string;
+  source_exists: number;
+}
+
+function decodeRevision(row: RevisionRow): DocumentRevision {
+  const revision = Number(row.revision);
+  const sequence = Number(row.sequence);
+  const operationCount = Number(row.operation_count);
+  if (!Number.isSafeInteger(revision) || revision < 1) {
+    throw new Error("corrupt revision number");
+  }
+  if (!Number.isSafeInteger(sequence) || sequence < 1 || Number(row.source_exists) !== 1) {
+    throw new Error("corrupt revision sequence");
+  }
+  if (!Number.isSafeInteger(operationCount) || operationCount < 1) {
+    throw new Error("corrupt revision operation count");
+  }
+  let actors: unknown;
+  try {
+    actors = JSON.parse(row.actors);
+  } catch {
+    throw new Error("corrupt revision actors JSON");
+  }
+  if (!Array.isArray(actors) || actors.length === 0 ||
+      actors.some((actor) => typeof actor !== "string" || !ACTOR_PATTERN.test(actor))) {
+    throw new Error("corrupt revision actor set");
+  }
+  if (typeof row.created_at !== "string" || row.created_at.length === 0) {
+    throw new Error("corrupt revision timestamp");
+  }
+  return { revision, sequence, operationCount, actors, createdAt: row.created_at };
+}
 
 function checkpointSnapshot(payload: string, operationCount: number): DocumentSnapshot {
   let snapshot: unknown;
@@ -144,25 +183,19 @@ export class SqliteOperationStore {
       throw new Error("history limit must be between 1 and 100");
     }
     const rows = this.database.prepare(`
-      SELECT revision, sequence, operation_count, actors, created_at
-      FROM revisions
-      WHERE document_id = ?
+      SELECT revision, sequence, operation_count, actors, created_at,
+        (EXISTS(
+          SELECT 1 FROM operations
+          WHERE document_id = revisions.document_id AND sequence = revisions.sequence
+        ) OR EXISTS(
+          SELECT 1 FROM document_checkpoints
+          WHERE document_id = revisions.document_id AND sequence = revisions.sequence
+        )) AS source_exists
+      FROM revisions WHERE document_id = ?
       ORDER BY revision DESC
       LIMIT ?
-    `).all(documentId, limit) as Array<{
-      revision: number;
-      sequence: number;
-      operation_count: number;
-      actors: string;
-      created_at: string;
-    }>;
-    return rows.map((row) => ({
-      revision: Number(row.revision),
-      sequence: Number(row.sequence),
-      operationCount: Number(row.operation_count),
-      actors: JSON.parse(row.actors) as string[],
-      createdAt: row.created_at,
-    }));
+    `).all(documentId, limit) as unknown as RevisionRow[];
+    return rows.map(decodeRevision);
   }
 
   revisionAt(documentId: string, sequence: number): DocumentRevision | undefined {
@@ -171,23 +204,17 @@ export class SqliteOperationStore {
       throw new Error("revision sequence must be a positive integer");
     }
     const row = this.database.prepare(`
-      SELECT revision, sequence, operation_count, actors, created_at
-      FROM revisions
-      WHERE document_id = ? AND sequence = ?
-    `).get(documentId, sequence) as {
-      revision: number;
-      sequence: number;
-      operation_count: number;
-      actors: string;
-      created_at: string;
-    } | undefined;
-    return row ? {
-      revision: Number(row.revision),
-      sequence: Number(row.sequence),
-      operationCount: Number(row.operation_count),
-      actors: JSON.parse(row.actors) as string[],
-      createdAt: row.created_at,
-    } : undefined;
+      SELECT revision, sequence, operation_count, actors, created_at,
+        (EXISTS(
+          SELECT 1 FROM operations
+          WHERE document_id = revisions.document_id AND sequence = revisions.sequence
+        ) OR EXISTS(
+          SELECT 1 FROM document_checkpoints
+          WHERE document_id = revisions.document_id AND sequence = revisions.sequence
+        )) AS source_exists
+      FROM revisions WHERE document_id = ? AND sequence = ?
+    `).get(documentId, sequence) as unknown as RevisionRow | undefined;
+    return row ? decodeRevision(row) : undefined;
   }
 
   load(documentId: string, afterSequence = 0): StoredOperation[] {

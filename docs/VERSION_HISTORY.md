@@ -19,6 +19,10 @@ server replays the retained checkpoint plus immutable operations through the
 chosen sequence into a fresh `SequenceDocument`. This makes history auditable
 and exercises the same deterministic materialization path used by live
 replicas.
+Revision reads validate positive safe-integer identifiers, sequences, and
+operation counts; the actor JSON shape; the timestamp; and that the sequence is
+still backed by either an operation row or the retained checkpoint. Corrupt
+metadata fails closed instead of advertising an unmaterializable version.
 
 Compaction keeps a configured recent revision window. The oldest retained
 revision is materialized by the checkpoint; earlier revision metadata is pruned
