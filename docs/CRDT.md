@@ -18,7 +18,10 @@ breaks ties between concurrent operations.
 
 Incoming JSON is checked at runtime as well as by TypeScript: identifiers,
 actors, anchors, targets, and inserted graphemes must have their exact string or
-integer types before an operation can enter memory or SQLite.
+integer types before an operation can enter memory or SQLite. Insert anchors
+and delete targets must also resolve to insert-operation identifiers. A replica
+tracks unresolved references until their operations arrive, so an out-of-order
+delete cannot later masquerade as the character another operation referenced.
 
 ## Materializing text
 
@@ -39,6 +42,9 @@ Operations may arrive in any order:
   reachable when its ancestor arrives.
 - A delete whose target is not present is retained in `pendingDeletes`; the
   matching insert is immediately tombstoned when it arrives.
+- Missing anchors and targets are required to resolve to insert operations. A
+  later delete with one of those identifiers is rejected before mutation, as
+  are anchors or targets that already name a known delete.
 - Insert-anchor cycles are rejected when their closing edge arrives, before the
   replica mutates. Non-cyclic missing anchors remain valid for out-of-order
   delivery and may stay unreachable until their ancestor arrives.

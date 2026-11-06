@@ -70,6 +70,7 @@ export class SequenceDocument {
   private readonly pendingDeletes = new Set<string>();
   private readonly operations = new Map<string, Operation>();
   private readonly anchorComponents = new Map<string, string>();
+  private readonly requiredInsertIds = new Set<string>();
 
   constructor(actor: string) {
     if (!ACTOR_PATTERN.test(actor)) {
@@ -151,11 +152,21 @@ export class SequenceDocument {
       }
       return false;
     }
+    const reference = operation.kind === "insert" ? operation.after : operation.target;
+    const referencedOperation = reference === ROOT_ID ? undefined : this.operations.get(reference);
+    if ((referencedOperation && referencedOperation.kind !== "insert") ||
+        (operation.kind === "delete" && reference === operation.id)) {
+      throw new Error("insert anchors and delete targets must reference insert operations");
+    }
+    if (operation.kind === "delete" && this.requiredInsertIds.has(operation.id)) {
+      throw new Error("an operation referenced as an insert cannot resolve to a delete");
+    }
     if (operation.kind === "insert") this.acceptInsertAnchor(operation);
     this.counter = Math.max(this.counter, operation.counter);
 
     this.operations.set(operation.id, cloneOperation(operation));
     if (operation.kind === "insert") {
+      this.requiredInsertIds.delete(operation.id);
       this.nodes.set(operation.id, {
         id: operation.id,
         after: operation.after,
@@ -167,6 +178,7 @@ export class SequenceDocument {
       if (target) target.deleted = true;
       else this.pendingDeletes.add(operation.target);
     }
+    if (reference !== ROOT_ID && !referencedOperation) this.requiredInsertIds.add(reference);
     return true;
   }
 

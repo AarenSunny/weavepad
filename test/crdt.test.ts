@@ -66,6 +66,39 @@ test("cyclic insert anchors are rejected without mutating the replica", () => {
   ] }), /anchors must not form a cycle/);
 });
 
+test("anchors and delete targets resolve only to insert operations", () => {
+  const known = new SequenceDocument("known");
+  known.apply({
+    kind: "delete", id: "remove:1", actor: "remove", counter: 1, target: "missing:1",
+  });
+  const knownSnapshot = known.snapshot();
+  assert.throws(() => known.apply({
+    kind: "insert", id: "writer:1", actor: "writer", counter: 1,
+    after: "remove:1", value: "X",
+  }), /must reference insert operations/);
+  assert.throws(() => known.apply({
+    kind: "delete", id: "writer:1", actor: "writer", counter: 1, target: "remove:1",
+  }), /must reference insert operations/);
+  assert.deepEqual(known.snapshot(), knownSnapshot);
+
+  const deferred = new SequenceDocument("deferred");
+  deferred.apply({
+    kind: "insert", id: "writer:1", actor: "writer", counter: 1,
+    after: "anchor:1", value: "X",
+  });
+  const deferredSnapshot = deferred.snapshot();
+  assert.throws(() => deferred.apply({
+    kind: "delete", id: "anchor:1", actor: "anchor", counter: 1, target: "writer:1",
+  }), /referenced as an insert cannot resolve to a delete/);
+  assert.deepEqual(deferred.snapshot(), deferredSnapshot);
+
+  deferred.apply({
+    kind: "insert", id: "anchor:1", actor: "anchor", counter: 1,
+    after: "ROOT", value: "A",
+  });
+  assert.equal(deferred.toString(), "AX");
+});
+
 test("three replicas converge after shuffled offline edits", () => {
   const alice = new SequenceDocument("alice");
   const initial = alice.localInsert(0, "notes");
