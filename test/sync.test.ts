@@ -134,7 +134,15 @@ test("a durable operation replay receives an explicit acknowledgement", async (c
   const accepted = await client.inbox.next();
   assert.equal(accepted.type, "operations");
 
-  client.socket.send(JSON.stringify({ type: "operations", operations }));
+  const reorderedReplay = {
+    value: operations[0].value,
+    after: operations[0].after,
+    counter: operations[0].counter,
+    actor: operations[0].actor,
+    id: operations[0].id,
+    kind: operations[0].kind,
+  };
+  client.socket.send(JSON.stringify({ type: "operations", operations: [reorderedReplay] }));
   const replayed = await client.inbox.next();
   assert.deepEqual(replayed, {
     type: "ack",

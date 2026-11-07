@@ -45,9 +45,27 @@ test("duplicate delivery is idempotent and conflicting IDs are rejected", () => 
   const [operation] = source.localInsert(0, "A");
   const receiver = new SequenceDocument("receiver");
   assert.equal(receiver.apply(operation), true);
-  assert.equal(receiver.apply(operation), false);
+  assert.equal(receiver.apply({
+    value: operation.value,
+    after: operation.after,
+    counter: operation.counter,
+    actor: operation.actor,
+    id: operation.id,
+    kind: operation.kind,
+  }), false);
   assert.equal(receiver.toString(), "A");
   assert.throws(() => receiver.apply({ ...operation, value: "B" }), /conflicting operation/);
+
+  const [deletion] = source.localDelete(0);
+  assert.equal(receiver.apply(deletion), true);
+  assert.equal(receiver.apply({
+    target: deletion.target,
+    counter: deletion.counter,
+    actor: deletion.actor,
+    id: deletion.id,
+    kind: deletion.kind,
+  }), false);
+  assert.equal(receiver.toString(), "");
 });
 
 test("cyclic insert anchors are rejected without mutating the replica", () => {

@@ -48,7 +48,8 @@ Operations may arrive in any order:
 - Insert-anchor cycles are rejected when their closing edge arrives, before the
   replica mutates. Non-cyclic missing anchors remain valid for out-of-order
   delivery and may stay unreachable until their ancestor arrives.
-- Replaying an identical operation has no effect.
+- Replaying a semantically identical operation has no effect, regardless of
+  JSON object member order.
 - Reusing an identifier with a different payload is rejected as corruption.
 
 These rules make merge commutative and idempotent. Given the same valid operation

@@ -63,6 +63,17 @@ function cloneOperation(operation: Operation): Operation {
   return { ...operation };
 }
 
+function operationsEqual(left: Operation, right: Operation): boolean {
+  if (left.kind !== right.kind || left.id !== right.id || left.actor !== right.actor ||
+      left.counter !== right.counter) {
+    return false;
+  }
+  if (left.kind === "insert" && right.kind === "insert") {
+    return left.after === right.after && left.value === right.value;
+  }
+  return left.kind === "delete" && right.kind === "delete" && left.target === right.target;
+}
+
 export class SequenceDocument {
   readonly actor: string;
   private counter = 0;
@@ -147,7 +158,7 @@ export class SequenceDocument {
     this.validate(operation);
     const existing = this.operations.get(operation.id);
     if (existing) {
-      if (JSON.stringify(existing) !== JSON.stringify(operation)) {
+      if (!operationsEqual(existing, operation)) {
         throw new Error(`conflicting operation payload for ${operation.id}`);
       }
       return false;
