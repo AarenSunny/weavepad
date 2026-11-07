@@ -35,9 +35,11 @@ document, durable cursor monotonicity, or operation identifiers.
 
 Checkpoint reads fail closed when the stored sequence or operation count is
 invalid, the JSON envelope is malformed, the declared operation count does not
-match the snapshot, or the snapshot contains an invalid or conflicting CRDT
-operation. Before compaction writes a replacement checkpoint, it also rebuilds
-the complete candidate snapshot in a scratch replica. A semantically corrupt
+match the snapshot, or the snapshot contains an invalid, conflicting, or
+duplicate CRDT operation. Wire replays remain idempotent, but a persisted
+checkpoint must contain exactly one entry for each immutable operation ID.
+Before compaction writes a replacement checkpoint, it also rebuilds the
+complete candidate snapshot in a scratch replica. A semantically corrupt
 operation row therefore cannot be sealed into a checkpoint and have its source
 row deleted. Retained revision metadata is also decoded and checked for a live
 operation or checkpoint boundary before it can select the replacement

@@ -239,6 +239,27 @@ test("checkpoint loading rejects corrupt persisted metadata", async (context) =>
   );
   invalidOperationSet.close();
 
+  const duplicateOperationsDatabase = new DatabaseSync(databasePath);
+  const duplicateOperations = JSON.parse(valid.snapshot) as {
+    operations: Array<Record<string, unknown>>;
+  };
+  duplicateOperations.operations.push({ ...duplicateOperations.operations[0] });
+  duplicateOperationsDatabase.prepare(`
+    UPDATE document_checkpoints SET snapshot = ?, operation_count = ?
+    WHERE document_id = ?
+  `).run(
+    JSON.stringify(duplicateOperations),
+    duplicateOperations.operations.length,
+    "notes",
+  );
+  duplicateOperationsDatabase.close();
+  const duplicateOperationSet = new SqliteOperationStore(databasePath);
+  assert.throws(
+    () => duplicateOperationSet.checkpoint("notes"),
+    /corrupt checkpoint operation set/,
+  );
+  duplicateOperationSet.close();
+
   const invalidSequenceDatabase = new DatabaseSync(databasePath);
   invalidSequenceDatabase.prepare(`
     UPDATE document_checkpoints SET sequence = 0, snapshot = ?, operation_count = ?

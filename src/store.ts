@@ -98,7 +98,10 @@ function checkpointSnapshot(payload: string, operationCount: number): DocumentSn
     throw new Error("corrupt checkpoint operation count");
   }
   try {
-    SequenceDocument.fromSnapshot("checkpoint", { operations });
+    const document = SequenceDocument.fromSnapshot("checkpoint", { operations });
+    if (document.exportOperations().length !== operations.length) {
+      throw new Error("duplicate checkpoint operation");
+    }
   } catch {
     throw new Error("corrupt checkpoint operation set");
   }
