@@ -76,10 +76,15 @@ function decodeRevision(row: RevisionRow): DocumentRevision {
       actors.some((actor) => typeof actor !== "string" || !ACTOR_PATTERN.test(actor))) {
     throw new Error("corrupt revision actor set");
   }
+  const canonicalActors = Array.from(new Set(actors)).sort();
+  if (canonicalActors.length !== actors.length ||
+      canonicalActors.some((actor, index) => actor !== actors[index])) {
+    throw new Error("corrupt revision actor set");
+  }
   if (typeof row.created_at !== "string" || row.created_at.length === 0) {
     throw new Error("corrupt revision timestamp");
   }
-  return { revision, sequence, operationCount, actors, createdAt: row.created_at };
+  return { revision, sequence, operationCount, actors: canonicalActors, createdAt: row.created_at };
 }
 
 function checkpointSnapshot(payload: string, operationCount: number): DocumentSnapshot {

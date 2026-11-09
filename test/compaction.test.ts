@@ -174,6 +174,60 @@ test("compaction rejects corrupt revision boundaries before replacing rows", asy
   inspected.close();
 });
 
+test("history rejects noncanonical revision actor metadata before compaction", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "weavepad-revision-actors-"));
+  const databasePath = join(directory, "documents.db");
+  context.after(() => rm(directory, { recursive: true, force: true }));
+
+  const store = new SqliteOperationStore(databasePath);
+  const hub = new CollaborationHub(store);
+  const author = new SequenceDocument("author");
+  hub.submit("notes", author.localInsert(0, "A"));
+  hub.submit("notes", author.localInsert(1, "B"));
+  store.close();
+
+  const database = new DatabaseSync(databasePath);
+  database.prepare(`
+    UPDATE revisions SET actors = ?
+    WHERE document_id = ? AND revision = 2
+  `).run(JSON.stringify(["zeta", "alpha"]), "notes");
+  database.close();
+
+  const unsorted = new SqliteOperationStore(databasePath);
+  assert.throws(() => unsorted.history("notes"), /corrupt revision actor set/);
+  unsorted.close();
+
+  const duplicateDatabase = new DatabaseSync(databasePath);
+  duplicateDatabase.prepare(`
+    UPDATE revisions SET actors = ?
+    WHERE document_id = ? AND revision = 2
+  `).run(JSON.stringify(["author", "author"]), "notes");
+  duplicateDatabase.close();
+
+  const corrupted = new SqliteOperationStore(databasePath);
+  assert.throws(() => corrupted.history("notes"), /corrupt revision actor set/);
+  assert.throws(
+    () => new CollaborationHub(corrupted).compact("notes", 1),
+    /corrupt revision actor set/,
+  );
+  assert.equal(corrupted.checkpoint("notes"), undefined);
+  corrupted.close();
+
+  const inspected = new DatabaseSync(databasePath);
+  const counts = inspected.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM operations WHERE document_id = ?) AS operations,
+      (SELECT COUNT(*) FROM revisions WHERE document_id = ?) AS revisions,
+      (SELECT COUNT(*) FROM document_checkpoints WHERE document_id = ?) AS checkpoints
+  `).get("notes", "notes", "notes") as {
+    operations: number;
+    revisions: number;
+    checkpoints: number;
+  };
+  assert.deepEqual({ ...counts }, { operations: 2, revisions: 2, checkpoints: 0 });
+  inspected.close();
+});
+
 test("checkpoint loading rejects corrupt persisted metadata", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "weavepad-checkpoint-corruption-"));
   const databasePath = join(directory, "documents.db");
