@@ -131,6 +131,34 @@ test("compaction rejects corrupt operation rows before replacing them", async (c
   inspected.close();
 });
 
+test("sync rejects persisted payload identities that disagree with their storage key", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "weavepad-operation-identity-"));
+  const databasePath = join(directory, "documents.db");
+  context.after(() => rm(directory, { recursive: true, force: true }));
+
+  const store = new SqliteOperationStore(databasePath);
+  const hub = new CollaborationHub(store);
+  const author = new SequenceDocument("author");
+  hub.submit("notes", author.localInsert(0, "A"));
+  assert.equal(hub.text("notes"), "A");
+
+  const database = new DatabaseSync(databasePath);
+  const row = database.prepare(`
+    SELECT sequence, payload FROM operations
+    WHERE document_id = ? ORDER BY sequence ASC LIMIT 1
+  `).get("notes") as { sequence: number; payload: string };
+  const operation = JSON.parse(row.payload) as Record<string, unknown>;
+  database.prepare("UPDATE operations SET payload = ? WHERE sequence = ?")
+    .run(JSON.stringify({ ...operation, id: "other:1", actor: "other" }), row.sequence);
+  database.close();
+
+  assert.throws(() => hub.sync("notes", 0), /corrupt stored operation identity/);
+  assert.throws(() => hub.compact("notes", 1), /corrupt stored operation identity/);
+  assert.equal(store.checkpoint("notes"), undefined);
+  assert.equal(hub.text("notes"), "A");
+  store.close();
+});
+
 test("compaction rejects corrupt revision boundaries before replacing rows", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "weavepad-revision-corruption-"));
   const databasePath = join(directory, "documents.db");

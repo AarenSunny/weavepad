@@ -53,6 +53,36 @@ interface RevisionRow {
   source_exists: number;
 }
 
+interface OperationRow {
+  sequence: number;
+  operation_id: string;
+  payload: string;
+}
+
+function decodeStoredOperation(row: OperationRow): StoredOperation {
+  const sequence = Number(row.sequence);
+  if (!Number.isSafeInteger(sequence) || sequence < 1) {
+    throw new Error("corrupt stored operation sequence");
+  }
+  let operation: unknown;
+  try {
+    operation = JSON.parse(row.payload);
+  } catch {
+    throw new Error("corrupt stored operation JSON");
+  }
+  try {
+    SequenceDocument.fromSnapshot("stored-operation", {
+      operations: [operation as Operation],
+    });
+  } catch {
+    throw new Error("corrupt stored operation set");
+  }
+  if ((operation as Operation).id !== row.operation_id) {
+    throw new Error("corrupt stored operation identity");
+  }
+  return { sequence, operation: operation as Operation };
+}
+
 function decodeRevision(row: RevisionRow): DocumentRevision {
   const revision = Number(row.revision);
   const sequence = Number(row.sequence);
@@ -166,15 +196,15 @@ export class SqliteOperationStore {
       throw new Error("version predates the retained checkpoint");
     }
     const rows = this.database.prepare(`
-      SELECT sequence, payload
+      SELECT sequence, operation_id, payload
       FROM operations
       WHERE document_id = ? AND sequence > ? AND sequence <= ?
       ORDER BY sequence ASC
-    `).all(documentId, checkpoint?.sequence ?? 0, throughSequence) as Array<{ sequence: number; payload: string }>;
+    `).all(documentId, checkpoint?.sequence ?? 0, throughSequence) as unknown as OperationRow[];
     const snapshot = {
       operations: [
         ...(checkpoint?.snapshot.operations ?? []),
-        ...rows.map((row) => JSON.parse(row.payload) as Operation),
+        ...rows.map((row) => decodeStoredOperation(row).operation),
       ],
     };
     try {
@@ -231,15 +261,12 @@ export class SqliteOperationStore {
       throw new Error("sync cursor must be a non-negative integer");
     }
     const rows = this.database.prepare(`
-      SELECT sequence, payload
+      SELECT sequence, operation_id, payload
       FROM operations
       WHERE document_id = ? AND sequence > ?
       ORDER BY sequence ASC
-    `).all(documentId, afterSequence) as Array<{ sequence: number; payload: string }>;
-    return rows.map((row) => ({
-      sequence: Number(row.sequence),
-      operation: JSON.parse(row.payload) as Operation,
-    }));
+    `).all(documentId, afterSequence) as unknown as OperationRow[];
+    return rows.map(decodeStoredOperation);
   }
 
   state(documentId: string, afterSequence = 0): StoredDocumentState {
