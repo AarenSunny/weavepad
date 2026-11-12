@@ -41,11 +41,12 @@ checkpoint must contain exactly one entry for each immutable operation ID.
 Before compaction writes a replacement checkpoint, it also rebuilds the
 complete candidate snapshot in a scratch replica. A semantically corrupt
 operation row therefore cannot be sealed into a checkpoint and have its source
-row deleted. Retained revision metadata is also decoded, checked for a
-canonical actor set, and checked for a live operation or checkpoint boundary
-before it can select the replacement checkpoint. These application-level
-checks do not replace SQLite integrity checks, storage checksums, or tested
-backup restoration.
+row deleted. Sequence bounds are validated before range filters, preventing a
+damaged nonpositive row from being silently omitted from that candidate.
+Retained revision metadata is also decoded, checked for a canonical actor set,
+and checked for a live operation or checkpoint boundary before it can select
+the replacement checkpoint. These application-level checks do not replace
+SQLite integrity checks, storage checksums, or tested backup restoration.
 
 ## Bounded experiment
 

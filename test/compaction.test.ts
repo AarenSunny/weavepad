@@ -131,6 +131,28 @@ test("compaction rejects corrupt operation rows before replacing them", async (c
   inspected.close();
 });
 
+test("sync and snapshots reject operation sequences hidden below cursor zero", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "weavepad-operation-sequence-corruption-"));
+  const databasePath = join(directory, "documents.db");
+  context.after(() => rm(directory, { recursive: true, force: true }));
+
+  const writer = new SqliteOperationStore(databasePath);
+  const author = new SequenceDocument("author");
+  new CollaborationHub(writer).submit("notes", author.localInsert(0, "A"));
+  writer.close();
+
+  const database = new DatabaseSync(databasePath);
+  database.prepare("UPDATE operations SET sequence = -1 WHERE document_id = ?").run("notes");
+  database.close();
+
+  const corrupted = new SqliteOperationStore(databasePath);
+  assert.throws(() => corrupted.load("notes"), /corrupt stored operation sequence/);
+  assert.throws(() => corrupted.state("notes"), /corrupt stored operation sequence/);
+  assert.throws(() => corrupted.snapshotThrough("notes", 1), /corrupt stored operation sequence/);
+  assert.throws(() => corrupted.latestSequence("notes"), /corrupt stored operation sequence/);
+  corrupted.close();
+});
+
 test("sync rejects persisted payload identities that disagree with their storage key", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "weavepad-operation-identity-"));
   const databasePath = join(directory, "documents.db");

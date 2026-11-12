@@ -191,6 +191,7 @@ export class SqliteOperationStore {
     if (!Number.isSafeInteger(throughSequence) || throughSequence < 0) {
       throw new Error("version cursor must be a non-negative integer");
     }
+    this.operationSequenceMaximum(documentId);
     const checkpoint = this.checkpoint(documentId);
     if (checkpoint && throughSequence < checkpoint.sequence) {
       throw new Error("version predates the retained checkpoint");
@@ -260,6 +261,7 @@ export class SqliteOperationStore {
     if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) {
       throw new Error("sync cursor must be a non-negative integer");
     }
+    this.operationSequenceMaximum(documentId);
     const rows = this.database.prepare(`
       SELECT sequence, operation_id, payload
       FROM operations
@@ -317,12 +319,10 @@ export class SqliteOperationStore {
 
   latestSequence(documentId: string): number {
     validateDocumentId(documentId);
-    const row = this.database.prepare(`
-      SELECT COALESCE(MAX(sequence), 0) AS sequence
-      FROM operations
-      WHERE document_id = ?
-    `).get(documentId) as { sequence: number };
-    return Math.max(Number(row.sequence), this.checkpoint(documentId)?.sequence ?? 0);
+    return Math.max(
+      this.operationSequenceMaximum(documentId),
+      this.checkpoint(documentId)?.sequence ?? 0,
+    );
   }
 
   compact(documentId: string, retainRevisions = 50): CompactionReport {
@@ -485,6 +485,22 @@ export class SqliteOperationStore {
       SELECT COUNT(*) AS count FROM ${table} WHERE document_id = ?
     `).get(documentId) as { count: number };
     return Number(row.count);
+  }
+
+  private operationSequenceMaximum(documentId: string): number {
+    const row = this.database.prepare(`
+      SELECT MIN(sequence) AS minimum, MAX(sequence) AS maximum
+      FROM operations
+      WHERE document_id = ?
+    `).get(documentId) as { minimum: number | null; maximum: number | null };
+    if (row.minimum === null || row.maximum === null) return 0;
+    const minimum = Number(row.minimum);
+    const maximum = Number(row.maximum);
+    if (!Number.isSafeInteger(minimum) || minimum < 1 ||
+        !Number.isSafeInteger(maximum) || maximum < minimum) {
+      throw new Error("corrupt stored operation sequence");
+    }
+    return maximum;
   }
 
   private payloadBytes(documentId: string): number {

@@ -52,9 +52,11 @@ safe-integer sequence, JSON operation shape, and the invariant that the payload
 ID exactly matches the separately indexed SQLite operation ID. This catches a
 valid-looking but misidentified payload even when the document room is already
 cached in memory; the server fails the sync instead of forwarding corrupt
-durable state. Compaction uses the same row decoder before replacing source
-rows with a checkpoint. These checks do not add cryptographic storage
-authentication.
+durable state. Document-level sequence bounds are checked before applying the
+cursor filter, so a damaged nonpositive row cannot disappear below cursor zero
+and silently produce an incomplete replica. Compaction uses the same checks
+before replacing source rows with a checkpoint. These checks do not add
+cryptographic storage authentication.
 
 Using a durable server cursor avoids a subtle version-vector hole: receiving an
 actor's operation 12 does not prove that operation 11 was received. Sequence
