@@ -118,7 +118,9 @@ test("oversized WebSocket frames are isolated and counted", async (context) => {
   await closedEvent;
 
   let metrics = await fetch(`${origin}/metrics`).then((response) => response.json()) as RuntimeMetrics;
-  for (let attempt = 0; attempt < 20 && metrics.transportErrors !== 1; attempt += 1) {
+  for (let attempt = 0;
+    attempt < 20 && (metrics.transportErrors !== 1 || metrics.activeConnections !== 0);
+    attempt += 1) {
     await delay(5);
     metrics = await fetch(`${origin}/metrics`).then((response) => response.json()) as RuntimeMetrics;
   }
