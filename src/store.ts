@@ -107,7 +107,8 @@ function decodeRevision(row: RevisionRow): DocumentRevision {
     throw new Error("corrupt revision actor set");
   }
   const canonicalActors = Array.from(new Set(actors)).sort();
-  if (canonicalActors.length !== actors.length ||
+  if (canonicalActors.length > operationCount ||
+      canonicalActors.length !== actors.length ||
       canonicalActors.some((actor, index) => actor !== actors[index])) {
     throw new Error("corrupt revision actor set");
   }

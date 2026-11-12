@@ -224,7 +224,7 @@ test("compaction rejects corrupt revision boundaries before replacing rows", asy
   inspected.close();
 });
 
-test("history rejects noncanonical revision actor metadata before compaction", async (context) => {
+test("history rejects inconsistent revision actor metadata before compaction", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "weavepad-revision-actors-"));
   const databasePath = join(directory, "documents.db");
   context.after(() => rm(directory, { recursive: true, force: true }));
@@ -256,12 +256,23 @@ test("history rejects noncanonical revision actor metadata before compaction", a
 
   const corrupted = new SqliteOperationStore(databasePath);
   assert.throws(() => corrupted.history("notes"), /corrupt revision actor set/);
+  corrupted.close();
+
+  const actorCountDatabase = new DatabaseSync(databasePath);
+  actorCountDatabase.prepare(`
+    UPDATE revisions SET actors = ?
+    WHERE document_id = ? AND revision = 2
+  `).run(JSON.stringify(["author", "reviewer"]), "notes");
+  actorCountDatabase.close();
+
+  const impossibleActorCount = new SqliteOperationStore(databasePath);
+  assert.throws(() => impossibleActorCount.history("notes"), /corrupt revision actor set/);
   assert.throws(
-    () => new CollaborationHub(corrupted).compact("notes", 1),
+    () => new CollaborationHub(impossibleActorCount).compact("notes", 1),
     /corrupt revision actor set/,
   );
-  assert.equal(corrupted.checkpoint("notes"), undefined);
-  corrupted.close();
+  assert.equal(impossibleActorCount.checkpoint("notes"), undefined);
+  impossibleActorCount.close();
 
   const inspected = new DatabaseSync(databasePath);
   const counts = inspected.prepare(`

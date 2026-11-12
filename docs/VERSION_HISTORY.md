@@ -20,10 +20,10 @@ chosen sequence into a fresh `SequenceDocument`. This makes history auditable
 and exercises the same deterministic materialization path used by live
 replicas.
 Revision reads validate positive safe-integer identifiers, sequences, and
-operation counts; a sorted, duplicate-free actor set; the timestamp; and that
-the sequence is still backed by either an operation row or the retained
-checkpoint. Corrupt metadata fails closed instead of advertising an
-unmaterializable or misleading version.
+operation counts; a sorted, duplicate-free actor set whose size does not exceed
+the operation count; the timestamp; and that the sequence is still backed by
+either an operation row or the retained checkpoint. Corrupt metadata fails
+closed instead of advertising an unmaterializable or misleading version.
 
 Compaction keeps a configured recent revision window. The oldest retained
 revision is materialized by the checkpoint; earlier revision metadata is pruned
