@@ -10,6 +10,8 @@ test("accepted edit batches create durable document revisions", () => {
   const hub = new CollaborationHub(store);
   const author = new SequenceDocument("alice");
   const first = hub.submit("notes", author.localInsert(0, "one"));
+  const otherAuthor = new SequenceDocument("bob");
+  hub.submit("other-notes", otherAuthor.localInsert(0, "x"));
   const second = hub.submit("notes", author.localInsert(3, "!"));
 
   const history = hub.history("notes");

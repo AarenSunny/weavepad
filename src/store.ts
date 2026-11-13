@@ -51,6 +51,9 @@ interface RevisionRow {
   actors: string;
   created_at: string;
   source_exists: number;
+  previous_revision: number | null;
+  previous_sequence: number | null;
+  source_operation_count: number | null;
 }
 
 interface OperationRow {
@@ -95,6 +98,26 @@ function decodeRevision(row: RevisionRow): DocumentRevision {
   }
   if (!Number.isSafeInteger(operationCount) || operationCount < 1) {
     throw new Error("corrupt revision operation count");
+  }
+  const previousRevision = row.previous_revision === null
+    ? null
+    : Number(row.previous_revision);
+  const previousSequence = row.previous_sequence === null
+    ? null
+    : Number(row.previous_sequence);
+  const sourceOperationCount = row.source_operation_count === null
+    ? null
+    : Number(row.source_operation_count);
+  const hasPrevious = previousRevision !== null || previousSequence !== null ||
+    sourceOperationCount !== null;
+  if (hasPrevious &&
+      (!Number.isSafeInteger(previousRevision) || previousRevision! < 1 ||
+       previousRevision !== revision - 1 ||
+       !Number.isSafeInteger(previousSequence) || previousSequence! < 1 ||
+       previousSequence! >= sequence ||
+       !Number.isSafeInteger(sourceOperationCount) || sourceOperationCount! < 1 ||
+       sourceOperationCount !== operationCount)) {
+    throw new Error("corrupt revision progression");
   }
   let actors: unknown;
   try {
@@ -223,15 +246,30 @@ export class SqliteOperationStore {
       throw new Error("history limit must be between 1 and 100");
     }
     const rows = this.database.prepare(`
+      WITH revision_history AS (
+        SELECT revisions.*,
+          LAG(revision) OVER (ORDER BY revision) AS previous_revision,
+          LAG(sequence) OVER (ORDER BY revision) AS previous_sequence
+        FROM revisions WHERE document_id = ?
+      )
       SELECT revision, sequence, operation_count, actors, created_at,
         (EXISTS(
           SELECT 1 FROM operations
-          WHERE document_id = revisions.document_id AND sequence = revisions.sequence
+          WHERE document_id = revision_history.document_id
+            AND sequence = revision_history.sequence
         ) OR EXISTS(
           SELECT 1 FROM document_checkpoints
-          WHERE document_id = revisions.document_id AND sequence = revisions.sequence
-        )) AS source_exists
-      FROM revisions WHERE document_id = ?
+          WHERE document_id = revision_history.document_id
+            AND sequence = revision_history.sequence
+        )) AS source_exists,
+        previous_revision, previous_sequence,
+        CASE WHEN previous_sequence IS NULL THEN NULL ELSE (
+          SELECT COUNT(*) FROM operations
+          WHERE document_id = revision_history.document_id
+            AND sequence > revision_history.previous_sequence
+            AND sequence <= revision_history.sequence
+        ) END AS source_operation_count
+      FROM revision_history
       ORDER BY revision DESC
       LIMIT ?
     `).all(documentId, limit) as unknown as RevisionRow[];
@@ -244,15 +282,30 @@ export class SqliteOperationStore {
       throw new Error("revision sequence must be a positive integer");
     }
     const row = this.database.prepare(`
+      WITH revision_history AS (
+        SELECT revisions.*,
+          LAG(revision) OVER (ORDER BY revision) AS previous_revision,
+          LAG(sequence) OVER (ORDER BY revision) AS previous_sequence
+        FROM revisions WHERE document_id = ?
+      )
       SELECT revision, sequence, operation_count, actors, created_at,
         (EXISTS(
           SELECT 1 FROM operations
-          WHERE document_id = revisions.document_id AND sequence = revisions.sequence
+          WHERE document_id = revision_history.document_id
+            AND sequence = revision_history.sequence
         ) OR EXISTS(
           SELECT 1 FROM document_checkpoints
-          WHERE document_id = revisions.document_id AND sequence = revisions.sequence
-        )) AS source_exists
-      FROM revisions WHERE document_id = ? AND sequence = ?
+          WHERE document_id = revision_history.document_id
+            AND sequence = revision_history.sequence
+        )) AS source_exists,
+        previous_revision, previous_sequence,
+        CASE WHEN previous_sequence IS NULL THEN NULL ELSE (
+          SELECT COUNT(*) FROM operations
+          WHERE document_id = revision_history.document_id
+            AND sequence > revision_history.previous_sequence
+            AND sequence <= revision_history.sequence
+        ) END AS source_operation_count
+      FROM revision_history WHERE sequence = ?
     `).get(documentId, sequence) as unknown as RevisionRow | undefined;
     return row ? decodeRevision(row) : undefined;
   }

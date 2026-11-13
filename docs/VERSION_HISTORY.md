@@ -24,6 +24,11 @@ operation counts; a sorted, duplicate-free actor set whose size does not exceed
 the operation count; the timestamp; and that the sequence is still backed by
 either an operation row or the retained checkpoint. Corrupt metadata fails
 closed instead of advertising an unmaterializable or misleading version.
+For every revision whose predecessor is still retained, the revision number
+must be consecutive and its declared batch size must equal the durable
+operations between the two sequence boundaries. The oldest retained revision
+has no earlier boundary after compaction, so this check does not reconstruct
+that pruned batch.
 
 Compaction keeps a configured recent revision window. The oldest retained
 revision is materialized by the checkpoint; earlier revision metadata is pruned

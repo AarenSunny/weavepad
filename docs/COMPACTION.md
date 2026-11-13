@@ -44,10 +44,12 @@ operation row therefore cannot be sealed into a checkpoint and have its source
 row deleted. Sequence bounds are validated before range filters, preventing a
 damaged nonpositive row from being silently omitted from that candidate.
 Retained revision metadata is also decoded, checked for a canonical actor set
-consistent with the declared operation count, and checked for a live operation
-or checkpoint boundary before it can select the replacement checkpoint. These
-application-level checks do not replace SQLite integrity checks, storage
-checksums, or tested backup restoration.
+consistent with the declared operation count, checked against the durable batch
+since its retained predecessor, and checked for a live operation or checkpoint
+boundary before it can select the replacement checkpoint. The oldest retained
+revision has no earlier batch boundary after pruning. These application-level
+checks do not replace SQLite integrity checks, storage checksums, or tested
+backup restoration.
 
 ## Bounded experiment
 

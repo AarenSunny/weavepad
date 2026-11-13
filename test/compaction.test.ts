@@ -181,7 +181,7 @@ test("sync rejects persisted payload identities that disagree with their storage
   store.close();
 });
 
-test("compaction rejects corrupt revision boundaries before replacing rows", async (context) => {
+test("compaction rejects corrupt revision boundaries and progression", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "weavepad-revision-corruption-"));
   const databasePath = join(directory, "documents.db");
   context.after(() => rm(directory, { recursive: true, force: true }));
@@ -208,6 +208,23 @@ test("compaction rejects corrupt revision boundaries before replacing rows", asy
   );
   assert.equal(corrupted.checkpoint("notes"), undefined);
   corrupted.close();
+
+  const progressionDatabase = new DatabaseSync(databasePath);
+  progressionDatabase.prepare(`
+    UPDATE revisions SET sequence = 2, operation_count = 2
+    WHERE document_id = ? AND revision = 2
+  `).run("notes");
+  progressionDatabase.close();
+
+  const invalidProgression = new SqliteOperationStore(databasePath);
+  assert.throws(() => invalidProgression.history("notes"), /corrupt revision progression/);
+  assert.throws(() => invalidProgression.revisionAt("notes", 2), /corrupt revision progression/);
+  assert.throws(
+    () => new CollaborationHub(invalidProgression).compact("notes", 1),
+    /corrupt revision progression/,
+  );
+  assert.equal(invalidProgression.checkpoint("notes"), undefined);
+  invalidProgression.close();
 
   const inspected = new DatabaseSync(databasePath);
   const counts = inspected.prepare(`
